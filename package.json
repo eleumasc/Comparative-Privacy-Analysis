@@ -1,0 +1,16 @@
+{
+  "name": "comparative-privacy-analysis",
+  "version": "1.0.0",
+  "author": "Zubair Ahmad, Samuele Casarin",
+  "license": "ISC",
+  "scripts": {
+    "build": "rimraf build && tsc",
+    "dev:start": "npm run build && npm run start",
+    "start": "node build/index.js"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.3",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.2.2"
+  }
+}
