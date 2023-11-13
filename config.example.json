@@ -1,0 +1,6 @@
+{
+  "sourceDir": "/path/to/foxhound-analysis",
+  "executablePath": "/path/to/foxhound",
+  "profilePath": "/path/to/foxhound-profile",
+  "siteList": ["foo.com", "bar.org"]
+}

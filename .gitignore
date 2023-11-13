@@ -1,2 +1,4 @@
 node_modules/
 build/
+results/
+src/config.json
