@@ -3,7 +3,6 @@ import { useAgent } from "./useAgent";
 import { persistData } from "./persistData";
 
 export interface Config {
-  sourceDir: string;
   executablePath: string;
   profilePath: string;
   siteList: string[];
@@ -12,7 +11,7 @@ export interface Config {
 const OUTPUT_BASE_DIR = "results";
 
 export const runAnalysis = async (config: Config) => {
-  const { sourceDir, executablePath, profilePath, siteList } = config;
+  const { executablePath, profilePath, siteList } = config;
 
   const outputDir = `${OUTPUT_BASE_DIR}/${+new Date()}`;
 
@@ -27,7 +26,6 @@ export const runAnalysis = async (config: Config) => {
       },
       async (willThink) => {
         const browserProcess = spawnFoxhoundAnalysis({
-          sourceDir,
           executablePath,
           profilePath,
         });

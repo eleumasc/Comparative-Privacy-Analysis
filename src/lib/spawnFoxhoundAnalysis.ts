@@ -1,7 +1,6 @@
 import { ChildProcess, spawn } from "child_process";
 
 export interface FoxhoundAnalysisOptions {
-  sourceDir: string;
   executablePath: string;
   profilePath: string;
 }
@@ -11,7 +10,7 @@ export const spawnFoxhoundAnalysis = (
 ): ChildProcess => {
   const webExtArgs: string[] = [
     "run",
-    `--source-dir=${options.sourceDir}`,
+    `--source-dir=foxhound-analysis`,
     `--firefox=${options.executablePath}`,
     `--firefox-profile=${options.profilePath}`,
     "--profile-create-if-missing",
