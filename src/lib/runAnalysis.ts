@@ -3,17 +3,16 @@ import { useAgent } from "./useAgent";
 import { persistData } from "./persistData";
 
 export interface Config {
+  outputBasePath: string;
   executablePath: string;
   profilePath: string;
   siteList: string[];
 }
 
-const OUTPUT_BASE_DIR = "results";
-
 export const runAnalysis = async (config: Config) => {
-  const { executablePath, profilePath, siteList } = config;
+  const { outputBasePath, executablePath, profilePath, siteList } = config;
 
-  const outputDir = `${OUTPUT_BASE_DIR}/${+new Date()}`;
+  const outputDir = `${outputBasePath}/${+new Date()}`;
 
   const runOne = async (site: string, analysisName: string) => {
     console.log("begin analysis", analysisName);

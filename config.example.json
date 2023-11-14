@@ -1,4 +1,5 @@
 {
+  "outputBasePath": "/path/to/results",
   "executablePath": "/path/to/foxhound",
   "profilePath": "/path/to/foxhound-profile",
   "siteList": ["foo.com", "bar.org"]
