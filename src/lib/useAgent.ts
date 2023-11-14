@@ -36,9 +36,9 @@ export const useAgent = async (
           clearTimeout(antiHangTimeout);
           onReceiveDataListener(body.data);
           notifyDidThink!();
-          return response.status(204);
+          return response.status(204).end();
         default:
-          return response.status(404);
+          return response.status(404).end();
       }
     });
 
