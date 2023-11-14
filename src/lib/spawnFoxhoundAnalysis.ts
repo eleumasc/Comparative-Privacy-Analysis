@@ -3,6 +3,7 @@ import { ChildProcess, spawn } from "child_process";
 export interface FoxhoundAnalysisOptions {
   executablePath: string;
   profilePath: string;
+  headless?: boolean;
 }
 
 export const spawnFoxhoundAnalysis = (
@@ -17,7 +18,7 @@ export const spawnFoxhoundAnalysis = (
     "--keep-profile-changes",
     "--no-reload",
     ...["--pref", "toolkit.startup.max_resumed_crashes=-1"],
-    "--arg=--headless",
+    ...(options.headless ?? false ? ["--arg=--headless"] : []),
   ];
 
   return spawn("web-ext", webExtArgs);
