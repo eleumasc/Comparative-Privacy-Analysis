@@ -4,6 +4,7 @@ export interface FoxhoundAnalysisOptions {
   executablePath: string;
   profilePath: string;
   headless?: boolean;
+  trackingProtection?: boolean;
 }
 
 export const spawnFoxhoundAnalysis = (
@@ -17,9 +18,28 @@ export const spawnFoxhoundAnalysis = (
     "--profile-create-if-missing",
     "--keep-profile-changes",
     "--no-reload",
-    ...["--pref", "toolkit.startup.max_resumed_crashes=-1"],
-    ...(options.headless ?? false ? ["--arg=--headless"] : []),
-  ];
+    pref("toolkit.startup.max_resumed_crashes", -1),
+    ...trackingProtectionPrefs(options.trackingProtection ?? true),
+    options.headless ?? true ? ["--arg=--headless"] : [],
+  ].flat();
 
   return spawn("web-ext", webExtArgs);
+};
+
+type PrefType = boolean | number | string;
+
+const pref = (key: string, value: PrefType) => {
+  return ["--pref", `${key}=${value}`];
+};
+
+const trackingProtectionPrefs = (enabled: boolean): string[][] => {
+  return [
+    pref("browser.contentblocking.category", enabled ? "standard" : "custom"),
+    pref("network.cookie.cookieBehavior", enabled ? 5 : 0),
+    pref("privacy.trackingprotection.pbmode.enabled", enabled),
+    pref("privacy.trackingprotection.emailtracking.pbmode.enabled", enabled),
+    pref("privacy.trackingprotection.cryptomining.enabled", enabled),
+    pref("privacy.trackingprotection.fingerprinting.enabled", enabled),
+    pref("privacy.fingerprintingProtection.pbmode", enabled),
+  ];
 };
