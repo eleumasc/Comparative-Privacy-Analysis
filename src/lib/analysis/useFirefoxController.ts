@@ -9,9 +9,11 @@ import {
 } from "./FirefoxController";
 
 export const DEFAULT_PORT = 8040;
+export const DEFAULT_MAX_RECEIVED_FRAME_SIZE = 50 * 1024 * 1024;
 
 export interface FirefoxControllerOptions {
   port?: number;
+  maxReceivedFrameSize?: number;
 }
 
 export const useFirefoxController = async (
@@ -38,6 +40,8 @@ export const useFirefoxController = async (
   const wsServer = new WebSocketServer({
     httpServer,
     autoAcceptConnections: false,
+    maxReceivedFrameSize:
+      options.maxReceivedFrameSize ?? DEFAULT_MAX_RECEIVED_FRAME_SIZE,
   });
 
   const connectCompleters = new Map<string, Completer<FirefoxAgent>>();
@@ -55,6 +59,8 @@ export const useFirefoxController = async (
         const socket = request.accept(null, request.origin);
         connectCompleter.complete(new DefaultFirefoxAgent(socket));
       }
+    } else {
+      request.reject();
     }
   });
 
