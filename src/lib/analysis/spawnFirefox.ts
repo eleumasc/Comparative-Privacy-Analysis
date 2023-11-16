@@ -24,12 +24,14 @@ export const spawnFirefox = (
     pref("toolkit.startup.max_resumed_crashes", -1),
     ...trackingProtectionPrefs(options.trackingProtection ?? true),
     options.headless ?? true ? ["--arg=--headless"] : [],
+    options.debugMode ? ["--verbose"] : [],
   ].flat();
 
   const browserProcess = spawn("web-ext", webExtArgs);
 
-  if (options.debugMode ?? false) {
+  if (options.debugMode) {
     browserProcess.stdout.pipe(process.stdout);
+    browserProcess.stderr.pipe(process.stderr);
   }
 
   return browserProcess;

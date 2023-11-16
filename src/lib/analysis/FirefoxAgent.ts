@@ -59,9 +59,11 @@ export class DefaultFirefoxAgent implements FirefoxAgent {
     }
   }
 
-  private onSocketClose(_code: number, _desc: string): void {
+  private onSocketClose(code: number, desc: string): void {
     for (const taskCompleter of this.taskCompleters.values()) {
-      taskCompleter.completeError();
+      taskCompleter.completeError(
+        new Error(`Socket has been closed: ${desc} (${code})`)
+      );
     }
     this.taskCompleters.clear();
   }

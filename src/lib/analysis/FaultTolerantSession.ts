@@ -11,9 +11,9 @@ export class FaultTolerantSession implements Session {
     try {
       return await currentSession.runAnalysis(url);
     } catch (e) {
-      console.log(e); // TODO: persist error log
       currentSession.terminate(true);
       this.session = null;
+      throw e;
     }
   }
 

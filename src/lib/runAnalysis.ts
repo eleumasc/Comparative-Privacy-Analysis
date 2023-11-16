@@ -28,10 +28,14 @@ export const runAnalysis = async (config: Config) => {
       const url = `http://${site}/`;
       const formatAnalysisName = (sequence: number) => `${site}+${sequence}`;
 
-      const result1 = await session.runAnalysis(url);
-      await persistData(result1, outputDir, formatAnalysisName(1));
-      const result2 = await session.runAnalysis(url);
-      await persistData(result2, outputDir, formatAnalysisName(2));
+      try {
+        const result1 = await session.runAnalysis(url);
+        const result2 = await session.runAnalysis(url);
+        await persistData(result1, outputDir, formatAnalysisName(1));
+        await persistData(result2, outputDir, formatAnalysisName(2));
+      } catch (e) {
+        console.log(e); // TODO: persist error log
+      }
     }
 
     if (debugMode) {
