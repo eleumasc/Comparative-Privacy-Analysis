@@ -1,6 +1,6 @@
 import { Session } from "./Session";
 
-export class FaultTolerantSession implements Session {
+export class FaultAwareSession implements Session {
   private session: Session | null = null;
 
   constructor(readonly sessionFactory: () => Promise<Session>) {}

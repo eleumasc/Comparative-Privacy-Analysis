@@ -124,10 +124,10 @@ const runAnalysis = async (url) => {
       try {
         const resolved = await Promise.race([
           (async () => (await navigate(tabId, url), true))(),
-          asyncDelay(30000),
+          asyncDelay(30_000),
         ]);
         if (resolved === true) {
-          await asyncDelay(5000);
+          await asyncDelay(5_000);
         }
       } catch {
         throw new Error("Navigation error");

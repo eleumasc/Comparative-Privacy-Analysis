@@ -3,7 +3,7 @@ import { FirefoxSession } from "./analysis/FirefoxSession";
 import { waitForever } from "./util/async";
 import { useFirefoxController } from "./analysis/useFirefoxController";
 import { persistData } from "./persistData";
-import { FaultTolerantSession } from "./analysis/FaultTolerantSession";
+import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Config } from "./Config";
 
 export const runAnalysis = async (config: Config) => {
@@ -13,7 +13,7 @@ export const runAnalysis = async (config: Config) => {
   const outputDir = `${outputBasePath}/${+new Date()}`;
 
   await useFirefoxController({}, async (firefoxController) => {
-    const session: Session = new FaultTolerantSession(
+    const session: Session = new FaultAwareSession(
       async () =>
         await FirefoxSession.create(firefoxController, {
           executablePath,
