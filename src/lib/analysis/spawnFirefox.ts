@@ -1,29 +1,38 @@
 import { ChildProcess, spawn } from "child_process";
 
-export interface FoxhoundAnalysisOptions {
+export interface FirefoxOptions {
   executablePath: string;
   profilePath: string;
   headless?: boolean;
   trackingProtection?: boolean;
+  debugMode?: boolean;
 }
 
-export const spawnFoxhoundAnalysis = (
-  options: FoxhoundAnalysisOptions
+export const spawnFirefox = (
+  options: FirefoxOptions,
+  startUrl?: string
 ): ChildProcess => {
   const webExtArgs: string[] = [
     "run",
-    `--source-dir=foxhound-analysis`,
+    `--source-dir=firefox-agent`,
     `--firefox=${options.executablePath}`,
     `--firefox-profile=${options.profilePath}`,
     "--profile-create-if-missing",
     "--keep-profile-changes",
     "--no-reload",
+    startUrl ? ["--start-url", startUrl] : [],
     pref("toolkit.startup.max_resumed_crashes", -1),
     ...trackingProtectionPrefs(options.trackingProtection ?? true),
     options.headless ?? true ? ["--arg=--headless"] : [],
   ].flat();
 
-  return spawn("web-ext", webExtArgs);
+  const browserProcess = spawn("web-ext", webExtArgs);
+
+  if (options.debugMode ?? false) {
+    browserProcess.stdout.pipe(process.stdout);
+  }
+
+  return browserProcess;
 };
 
 type PrefType = boolean | number | string;

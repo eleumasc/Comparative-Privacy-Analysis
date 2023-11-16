@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
-  "name": "Foxhound Analysis",
+  "name": "Firefox Agent",
   "version": "1.0",
 
-  "permissions": ["webRequest", "webNavigation", "*://*/*"],
+  "permissions": ["webRequest", "webNavigation", "tabs", "*://*/*"],
 
   "background": {
     "scripts": ["background.js"]

@@ -1,51 +1,43 @@
-import { spawnFoxhoundAnalysis } from "./spawnFoxhoundAnalysis";
-import { useAgent } from "./useAgent";
+import { Session } from "./analysis/Session";
+import { FirefoxSession } from "./analysis/FirefoxSession";
+import { waitForever } from "./util/async";
+import { useFirefoxController } from "./analysis/FirefoxController";
 import { persistData } from "./persistData";
-
-export interface Config {
-  outputBasePath: string;
-  executablePath: string;
-  profilePath: string;
-  siteList: string[];
-}
+import { FaultTolerantSession } from "./analysis/FaultTolerantSession";
+import { Config } from "./Config";
 
 export const runAnalysis = async (config: Config) => {
-  const { outputBasePath, executablePath, profilePath, siteList } = config;
+  const { debugMode, outputBasePath, executablePath, profilePath, siteList } =
+    config;
 
   const outputDir = `${outputBasePath}/${+new Date()}`;
 
-  const runOne = async (site: string, analysisName: string) => {
-    console.log("begin analysis", analysisName);
-    await useAgent(
-      {
-        navigationUrl: `http://${site}/`,
-        onReceiveDataListener: async (data) => {
-          await persistData(data, outputDir, analysisName);
-        },
-      },
-      async (willThink) => {
-        const browserProcess = spawnFoxhoundAnalysis({
+  await useFirefoxController({}, async (firefoxController) => {
+    const session: Session = new FaultTolerantSession(
+      async () =>
+        await FirefoxSession.create(firefoxController, {
           executablePath,
           profilePath,
-        });
-        // browserProcess.stdout?.pipe(process.stdout); // DEBUG
-
-        await willThink;
-
-        browserProcess.kill("SIGINT");
-      }
+          headless: false,
+          trackingProtection: false,
+          debugMode,
+        })
     );
-    console.log("end analysis", analysisName);
-  };
 
-  for (const site of siteList) {
-    const formatAnalysisName = (sequence: number) => `${site}+${sequence}`;
+    for (const site of siteList) {
+      const url = `http://${site}/`;
+      const formatAnalysisName = (sequence: number) => `${site}+${sequence}`;
 
-    try {
-      await runOne(site, formatAnalysisName(1));
-      await runOne(site, formatAnalysisName(2));
-    } catch (e) {
-      console.error(e);
+      const result1 = await session.runAnalysis(url);
+      await persistData(result1, outputDir, formatAnalysisName(1));
+      const result2 = await session.runAnalysis(url);
+      await persistData(result2, outputDir, formatAnalysisName(2));
     }
-  }
+
+    if (debugMode) {
+      await waitForever();
+    }
+
+    await session.terminate();
+  });
 };
