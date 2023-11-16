@@ -1,7 +1,7 @@
 import { Session } from "./analysis/Session";
 import { FirefoxSession } from "./analysis/FirefoxSession";
 import { waitForever } from "./util/async";
-import { useFirefoxController } from "./analysis/FirefoxController";
+import { useFirefoxController } from "./analysis/useFirefoxController";
 import { persistData } from "./persistData";
 import { FaultTolerantSession } from "./analysis/FaultTolerantSession";
 import { Config } from "./Config";
@@ -35,6 +35,7 @@ export const runAnalysis = async (config: Config) => {
     }
 
     if (debugMode) {
+      console.log("Waiting forever... (you are in debug mode)");
       await waitForever();
     }
 
