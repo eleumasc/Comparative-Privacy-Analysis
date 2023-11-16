@@ -94,7 +94,7 @@ const useTab = async (callback) => {
 };
 
 const useNetworkLogging = async (tabId, callback) => {
-  const state = { requests: [], redirects: [] };
+  const state = { requests: [] };
 
   const filterEvents = (listener) => {
     return (details) => {
@@ -108,19 +108,13 @@ const useNetworkLogging = async (tabId, callback) => {
     state.requests = [...state.requests, details];
   });
 
-  const onBeforeRedirect = filterEvents((details) => {
-    state.redirects = [...state.redirects, details];
-  });
-
   const webRequest = browser.webRequest;
   const webRequestFilter = { urls: ["*://*/*"] };
   webRequest.onBeforeRequest.addListener(onBeforeRequest, webRequestFilter);
-  webRequest.onBeforeRedirect.addListener(onBeforeRedirect, webRequestFilter);
   try {
     return await callback(state);
   } finally {
     webRequest.onBeforeRequest.removeListener(onBeforeRequest);
-    webRequest.onBeforeRedirect.removeListener(onBeforeRedirect);
   }
 };
 

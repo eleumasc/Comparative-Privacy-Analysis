@@ -27,7 +27,7 @@ const getStorageItems = () => {
   return items;
 };
 
-const cloneSavedFrame = (savedFrame) => {
+const _cloneSavedFrame = (savedFrame) => {
   const {
     asyncCause,
     asyncParent,
@@ -44,7 +44,7 @@ const cloneSavedFrame = (savedFrame) => {
     column,
     functionDisplayName,
     line,
-    parent: parent !== null ? cloneSavedFrame(parent) : null,
+    parent: parent !== null ? _cloneSavedFrame(parent) : null,
     source,
     sourceId,
   };
@@ -54,10 +54,26 @@ const getTaintReports = () => {
   return (
     XPCNativeWrapper(window.wrappedJSObject["$__taintReports"]) || []
   ).map((taintReport) => {
+    const { loc, parentloc, referrer, sink, stack, str, subframe } =
+      taintReport;
+    const taint = taintReport.str.taint;
+
     return {
-      ...taintReport,
-      stack: cloneSavedFrame(taintReport.stack),
-      taint: taintReport.str.taint,
+      loc,
+      parentloc,
+      referrer,
+      sink,
+      str,
+      subframe,
+      scriptUrl: stack.source,
+      taint: taint.map((taintRange) => {
+        const { begin, end, flow } = taintRange;
+        return {
+          begin,
+          end,
+          operation: flow.slice(-1)[0] ?? null,
+        };
+      }),
     };
   });
 };
