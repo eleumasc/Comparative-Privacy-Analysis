@@ -1,3 +1,20 @@
+class Completer {
+  constructor() {
+    let complete = null;
+    let completeError = null;
+    this.promise = new Promise((resolve, reject) => {
+      complete = (value) => {
+        resolve(value);
+      };
+      completeError = (reason) => {
+        reject(reason);
+      };
+    });
+    this.complete = complete;
+    this.completeError = completeError;
+  }
+}
+
 const asyncDelay = async (timeoutMs) => {
   await new Promise((resolve) => {
     setTimeout(() => {
@@ -22,12 +39,8 @@ const poll = async (callback, ttl, timeoutMs) => {
 };
 
 const navigate = async (tabId, url) => {
-  let complete = null;
-  let completeError = null;
-  const willNavigate = new Promise((resolve, reject) => {
-    complete = () => resolve();
-    completeError = (reason) => reject(reason);
-  });
+  const navigateCompleter = new Completer();
+  const willNavigate = navigateCompleter.promise;
 
   const STATE_START = 0;
   const STATE_ERROR = 1;
@@ -53,14 +66,14 @@ const navigate = async (tabId, url) => {
         state = STATE_COMMITTED;
         break;
       case STATE_ERROR:
-        completeError(lastError);
+        navigateCompleter.completeError(lastError);
         break;
       default:
     }
   });
 
   const onCompleted = filterEvents(() => {
-    complete();
+    navigateCompleter.complete();
   });
 
   const onErrorOccurred = filterEvents((details) => {
