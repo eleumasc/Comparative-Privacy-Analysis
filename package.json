@@ -6,7 +6,9 @@
   "scripts": {
     "build": "rimraf build && tsc",
     "dev:analysis": "npm run build && npm run analysis",
-    "analysis": "node build/analysis.js"
+    "analysis": "node build/analysis.js",
+    "dev:measurement": "npm run build && npm run measurement",
+    "measurement": "node build/measurement.js"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.3",
