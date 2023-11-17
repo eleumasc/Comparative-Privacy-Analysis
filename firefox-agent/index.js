@@ -81,15 +81,17 @@ const getTaintReports = () => {
 browser.runtime.onMessage.addListener((message, _, sendResponse) => {
   const { action } = message;
   switch (action) {
-    case "Snapshot":
+    case "Snapshot": {
+      const { isFoxhound } = message;
       sendResponse({
         frameId: browser.runtime.getFrameId(window),
         url: document.URL,
         baseUrl: document.baseURI,
         cookies: getCookies(),
         storageItems: getStorageItems(),
-        taintReports: getTaintReports(),
+        ...(isFoxhound ? { taintReports: getTaintReports() } : null),
       });
       return;
+    }
   }
 });

@@ -5,14 +5,20 @@ import { timeBomb } from "../util/async";
 import { FirefoxController } from "./FirefoxController";
 import { FirefoxAgent } from "./FirefoxAgent";
 
+export interface FirefoxSessionOptions {
+  isFoxhound?: boolean;
+}
+
 export class FirefoxSession implements Session {
   constructor(
     readonly agent: FirefoxAgent,
-    readonly browserProcess: ChildProcess
+    readonly browserProcess: ChildProcess,
+    readonly options?: FirefoxSessionOptions
   ) {}
 
   async runAnalysis(url: string): Promise<any> {
-    return await this.agent.assignTask("RunAnalysis", { url });
+    const isFoxhound = this.options?.isFoxhound ?? false;
+    return await this.agent.assignTask("RunAnalysis", { url, isFoxhound });
   }
 
   async terminate(force?: boolean): Promise<void> {
@@ -26,7 +32,8 @@ export class FirefoxSession implements Session {
 
   static async create(
     controller: FirefoxController,
-    options: FirefoxOptions
+    options: FirefoxOptions,
+    sessionOptions?: FirefoxSessionOptions
   ): Promise<FirefoxSession> {
     const agentId = controller.generateAgentId();
     const connectUrl = controller.getConnectUrl(agentId);
@@ -36,7 +43,7 @@ export class FirefoxSession implements Session {
 
       const agent = await controller.waitForAgent(agentId);
 
-      return new FirefoxSession(agent, browserProcess);
+      return new FirefoxSession(agent, browserProcess, sessionOptions);
     })();
 
     try {

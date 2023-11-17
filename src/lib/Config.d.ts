@@ -1,7 +1,13 @@
 export interface Config {
   debugMode?: boolean;
   outputBasePath: string;
-  executablePath: string;
-  profilePath: string;
+  profilesBasePath: string;
+  foxhound: BrowserConfig;
+  firefox: BrowserConfig;
+  brave: BrowserConfig;
   siteList: string[];
+}
+
+export interface BrowserConfig {
+  executablePath: string;
 }

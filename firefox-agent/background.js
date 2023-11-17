@@ -131,7 +131,7 @@ const useNetworkLogging = async (tabId, callback) => {
   }
 };
 
-const runAnalysis = async (url) => {
+const runAnalysis = async ({ url, isFoxhound }) => {
   return await useTab(async (tabId) => {
     return await useNetworkLogging(tabId, async (networkLoggingState) => {
       try {
@@ -154,7 +154,7 @@ const runAnalysis = async (url) => {
             try {
               const result = await browser.tabs.sendMessage(
                 tabId,
-                { action: "Snapshot" },
+                { action: "Snapshot", isFoxhound },
                 { frameId }
               );
               return result;
@@ -175,8 +175,7 @@ const runAnalysis = async (url) => {
 const dispatchTask = async (command, parameter) => {
   switch (command) {
     case "RunAnalysis": {
-      const { url } = parameter;
-      return await runAnalysis(url);
+      return await runAnalysis(parameter);
     }
     case "Shutdown": {
       shutdownFlagged = true;

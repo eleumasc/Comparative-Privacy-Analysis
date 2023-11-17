@@ -1,7 +1,15 @@
 {
   "debugMode": false,
   "outputBasePath": "/path/to/results",
-  "executablePath": "/path/to/foxhound",
-  "profilePath": "/path/to/foxhound-profile",
+  "profilesBasePath": "/path/to/profiles",
+  "foxhound": {
+    "executablePath": "/path/to/foxhound"
+  },
+  "firefox": {
+    "executablePath": "/path/to/firefox"
+  },
+  "brave": {
+    "executablePath": "/path/to/brave"
+  },
   "siteList": ["foo.com", "bar.org"]
 }

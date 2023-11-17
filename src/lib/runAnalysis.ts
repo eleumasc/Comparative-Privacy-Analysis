@@ -7,35 +7,67 @@ import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Config } from "./Config";
 
 export const runAnalysis = async (config: Config) => {
-  const { debugMode, outputBasePath, executablePath, profilePath, siteList } =
-    config;
+  const {
+    debugMode,
+    outputBasePath,
+    profilesBasePath,
+    foxhound,
+    firefox,
+    brave,
+    siteList,
+  } = config;
 
   const outputDir = `${outputBasePath}/${+new Date()}`;
 
   await useFirefoxController({}, async (firefoxController) => {
-    const session: Session = new FaultAwareSession(
+    const tfSession: Session = new FaultAwareSession(
+      async () =>
+        await FirefoxSession.create(
+          firefoxController,
+          {
+            executablePath: foxhound.executablePath,
+            profilePath: `${profilesBasePath}/tf`,
+            headless: false,
+            trackingProtection: false,
+          },
+          { isFoxhound: true }
+        )
+    );
+
+    const ffSession: Session = new FaultAwareSession(
       async () =>
         await FirefoxSession.create(firefoxController, {
-          executablePath,
-          profilePath,
+          executablePath: firefox.executablePath,
+          profilePath: `${profilesBasePath}/ff`,
           headless: false,
-          trackingProtection: false,
-          debugMode,
+          trackingProtection: true,
         })
     );
 
     for (const site of siteList) {
       const url = `http://${site}/`;
-      const formatAnalysisName = (sequence: number) => `${site}+${sequence}`;
+      const formatAnalysisName = (suffix: string) => `${site}+${suffix}`;
 
-      try {
-        const result1 = await session.runAnalysis(url);
-        const result2 = await session.runAnalysis(url);
-        await persistData(result1, outputDir, formatAnalysisName(1));
-        await persistData(result2, outputDir, formatAnalysisName(2));
-      } catch (e) {
-        console.log(e); // TODO: persist error log
-      }
+      await Promise.allSettled([
+        (async () => {
+          try {
+            const resultA = await tfSession.runAnalysis(url);
+            const resultB = await tfSession.runAnalysis(url);
+            await persistData(resultA, outputDir, formatAnalysisName("tfA"));
+            await persistData(resultB, outputDir, formatAnalysisName("tfB"));
+          } catch (e) {
+            console.log(e); // TODO: persist error log
+          }
+        })(),
+        (async () => {
+          try {
+            const result = await ffSession.runAnalysis(url);
+            await persistData(result, outputDir, formatAnalysisName("ff"));
+          } catch (e) {
+            console.log(e); // TODO: persist error log
+          }
+        })(),
+      ]);
     }
 
     if (debugMode) {
@@ -43,6 +75,7 @@ export const runAnalysis = async (config: Config) => {
       await waitForever();
     }
 
-    await session.terminate();
+    await tfSession.terminate();
+    await ffSession.terminate();
   });
 };
