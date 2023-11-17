@@ -15,12 +15,30 @@ class Completer {
   }
 }
 
-const asyncDelay = async (timeoutMs) => {
-  await new Promise((resolve) => {
+const asyncDelay = (timeoutMs) => {
+  return new Promise((resolve) => {
     setTimeout(() => {
       resolve();
     }, timeoutMs);
   });
+};
+
+const timeBomb = async (promise, timeoutMs) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Promise timed out after ${timeoutMs} ms`));
+      }, timeoutMs);
+
+      const clearAndReject = () => {
+        clearTimeout(timeoutId);
+        reject();
+      };
+
+      promise.then(clearAndReject, clearAndReject);
+    }),
+  ]);
 };
 
 const poll = async (callback, ttl, timeoutMs) => {
@@ -40,7 +58,6 @@ const poll = async (callback, ttl, timeoutMs) => {
 
 const navigate = async (tabId, url) => {
   const navigateCompleter = new Completer();
-  const willNavigate = navigateCompleter.promise;
 
   const STATE_START = 0;
   const STATE_ERROR = 1;
@@ -66,7 +83,9 @@ const navigate = async (tabId, url) => {
         state = STATE_COMMITTED;
         break;
       case STATE_ERROR:
-        navigateCompleter.completeError(lastError);
+        navigateCompleter.completeError(
+          new Error(`Navigation error: ${lastError}`)
+        );
         break;
       default:
     }
@@ -87,8 +106,10 @@ const navigate = async (tabId, url) => {
   webNavigation.onCompleted.addListener(onCompleted);
   webNavigation.onErrorOccurred.addListener(onErrorOccurred);
   try {
-    const willUpdate = browser.tabs.update(tabId, { url });
-    await Promise.all([willUpdate, willNavigate]);
+    await Promise.all([
+      browser.tabs.update(tabId, { url }),
+      navigateCompleter.promise,
+    ]);
   } finally {
     webNavigation.onBeforeNavigate.removeListener(onBeforeNavigate);
     webNavigation.onCommitted.removeListener(onCommitted);
@@ -100,7 +121,7 @@ const navigate = async (tabId, url) => {
 const useTab = async (callback) => {
   const { id: tabId } = await browser.tabs.create({});
   try {
-    return await callback(tabId);
+    await callback(tabId);
   } finally {
     await browser.tabs.remove(tabId);
   }
@@ -118,58 +139,74 @@ const useNetworkLogging = async (tabId, callback) => {
   };
 
   const onBeforeRequest = filterEvents((details) => {
-    state.requests = [...state.requests, details];
+    const {
+      requestId,
+      frameId,
+      method,
+      url,
+      type: resourceType,
+      urlClassification,
+    } = details;
+
+    state.requests = [
+      ...state.requests,
+      {
+        requestId,
+        frameId: String(frameId),
+        method,
+        url,
+        resourceType,
+        urlClassification,
+      },
+    ];
   });
 
   const webRequest = browser.webRequest;
   const webRequestFilter = { urls: ["*://*/*"] };
   webRequest.onBeforeRequest.addListener(onBeforeRequest, webRequestFilter);
   try {
-    return await callback(state);
+    await callback(state);
   } finally {
     webRequest.onBeforeRequest.removeListener(onBeforeRequest);
   }
 };
 
 const runAnalysis = async ({ url, isFoxhound }) => {
-  return await useTab(async (tabId) => {
-    return await useNetworkLogging(tabId, async (networkLoggingState) => {
-      try {
-        const resolved = await Promise.race([
-          (async () => (await navigate(tabId, url), true))(),
-          asyncDelay(30_000),
-        ]);
-        if (resolved === true) {
-          await asyncDelay(5_000);
-        }
-      } catch {
-        throw new Error("Navigation error");
-      }
+  const process = async (tabId, networkLoggingState) => {
+    await timeBomb(navigate(tabId, url), 30000);
+    await asyncDelay(5000);
 
-      const pageData = (
-        await Promise.all(
-          (
-            await browser.webNavigation.getAllFrames({ tabId })
-          ).map(async ({ frameId }) => {
-            try {
-              const result = await browser.tabs.sendMessage(
-                tabId,
-                { action: "Snapshot", isFoxhound },
-                { frameId }
-              );
-              return result;
-            } catch (e) {
-              return null;
-            }
-          })
-        )
-      ).filter((element) => element !== null);
-      const networkData = { ...networkLoggingState };
-      const data = { pageData, networkData };
+    const requests = networkLoggingState.requests;
+    const frames = (
+      await Promise.all(
+        (
+          await browser.webNavigation.getAllFrames({ tabId })
+        ).map(async ({ frameId }) => {
+          try {
+            return await browser.tabs.sendMessage(
+              tabId,
+              { action: "Snapshot", isFoxhound },
+              { frameId }
+            );
+          } catch (e) {
+            return null;
+          }
+        })
+      )
+    ).filter((element) => element !== null);
 
-      return data;
-    });
-  });
+    return { requests, frames };
+  };
+
+  let result = null;
+  await useTab(
+    async (tabId) =>
+      await useNetworkLogging(tabId, async (networkLoggingState) => {
+        result = await process(tabId, networkLoggingState);
+      })
+  );
+
+  return result;
 };
 
 const dispatchTask = async (command, parameter) => {
@@ -190,7 +227,7 @@ const acceptTask = async (task) => {
     const result = await dispatchTask(command, parameter);
     return { taskId, status: "success", detail: result };
   } catch (e) {
-    return { taskId, status: "failure", detail: { error: String(e) } };
+    return { taskId, status: "failure", reason: String(e) };
   }
 };
 
@@ -200,10 +237,10 @@ const closeBrowser = async () => {
   );
 };
 
-const getConnectUrlFromStartTab = async () => {
+const getConnectUrlFromStartTab = () => {
   const PREFIX = "firefox-agent:";
 
-  return await poll(
+  return poll(
     async () => {
       const allTabs = await browser.tabs.query({});
       const targetTab = allTabs.find((tab) => tab.title.startsWith(PREFIX));

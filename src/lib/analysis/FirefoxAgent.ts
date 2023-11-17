@@ -2,7 +2,7 @@ import { connection as WebSocket, Message } from "websocket";
 import Completer from "../util/Completer";
 
 export interface FirefoxAgent {
-  assignTask(command: string, parameter: any): Promise<any>;
+  assignTask(command: string, parameter: any): Promise<TaskResult>;
   close(): void;
 }
 
@@ -12,14 +12,25 @@ interface Task {
   parameter: any;
 }
 
-interface TaskResult {
+interface BaseTaskResult {
   taskId: string;
-  status: "success" | "failure";
+  status: string;
+}
+
+interface SuccessfulTaskResult extends BaseTaskResult {
+  status: "success";
   detail: any;
 }
 
+interface FailedTaskResult extends BaseTaskResult {
+  status: "failure";
+  reason: string;
+}
+
+export type TaskResult = SuccessfulTaskResult | FailedTaskResult;
+
 export class DefaultFirefoxAgent implements FirefoxAgent {
-  private taskCompleters = new Map<string, Completer<any>>();
+  private taskCompleters = new Map<string, Completer<TaskResult>>();
 
   constructor(readonly socket: WebSocket) {
     socket.on("message", (message) => {
@@ -31,7 +42,7 @@ export class DefaultFirefoxAgent implements FirefoxAgent {
     });
   }
 
-  async assignTask(command: string, parameter: any): Promise<any> {
+  async assignTask(command: string, parameter: any): Promise<TaskResult> {
     const taskId = crypto.randomUUID();
     const taskCompleter = new Completer<any>();
     this.taskCompleters.set(taskId, taskCompleter);
@@ -51,10 +62,10 @@ export class DefaultFirefoxAgent implements FirefoxAgent {
   private onSocketMessage(message: Message): void {
     if (message.type === "utf8") {
       const taskResult = JSON.parse(message.utf8Data) as TaskResult;
-      const { taskId, detail } = taskResult;
+      const { taskId } = taskResult;
       const taskCompleter = this.taskCompleters.get(taskId);
       if (taskCompleter) {
-        taskCompleter.complete(detail);
+        taskCompleter.complete(taskResult);
       }
     }
   }

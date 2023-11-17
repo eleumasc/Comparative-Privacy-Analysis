@@ -1,5 +1,3 @@
-import { TimeoutError } from "./TimeoutError";
-
 export const asyncDelay = (timeoutMs: number): Promise<void> => {
   return new Promise((resolve) => {
     setTimeout(() => {
@@ -12,17 +10,21 @@ export const timeBomb = async <T>(
   promise: Promise<T>,
   timeoutMs: number
 ): Promise<T> => {
-  return new Promise(async (resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new TimeoutError(`Timeout after ${timeoutMs} ms`));
-    }, timeoutMs);
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`Promise timed out after ${timeoutMs} ms`));
+      }, timeoutMs);
 
-    try {
-      resolve(await promise);
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  });
+      const clearAndReject = (error: any) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      };
+
+      promise.then(clearAndReject, clearAndReject);
+    }),
+  ]);
 };
 
 export const waitForever = async () => {

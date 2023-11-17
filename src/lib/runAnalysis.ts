@@ -5,6 +5,8 @@ import { useFirefoxController } from "./analysis/useFirefoxController";
 import { persistData } from "./persistData";
 import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Config } from "./Config";
+import { ChromiumSession } from "./analysis/ChromiumSession";
+import path from "path";
 
 export const runAnalysis = async (config: Config) => {
   const {
@@ -17,30 +19,43 @@ export const runAnalysis = async (config: Config) => {
     siteList,
   } = config;
 
-  const outputDir = `${outputBasePath}/${+new Date()}`;
+  const analysisTime = `${+new Date()}`;
+  const outputDir = path.join(outputBasePath, analysisTime);
 
   await useFirefoxController({}, async (firefoxController) => {
     const tfSession: Session = new FaultAwareSession(
       async () =>
-        await FirefoxSession.create(
-          firefoxController,
-          {
+        await FirefoxSession.create(firefoxController, {
+          firefoxOptions: {
             executablePath: foxhound.executablePath,
-            profilePath: `${profilesBasePath}/tf`,
+            profilePath: path.join(profilesBasePath, "tf"),
             headless: false,
             trackingProtection: false,
           },
-          { isFoxhound: true }
-        )
+          isFoxhound: true,
+        })
     );
 
     const ffSession: Session = new FaultAwareSession(
       async () =>
         await FirefoxSession.create(firefoxController, {
-          executablePath: firefox.executablePath,
-          profilePath: `${profilesBasePath}/ff`,
-          headless: false,
-          trackingProtection: true,
+          firefoxOptions: {
+            executablePath: firefox.executablePath,
+            profilePath: path.join(profilesBasePath, "ff"),
+            headless: false,
+            trackingProtection: true,
+          },
+        })
+    );
+
+    const brSession: Session = new FaultAwareSession(
+      async () =>
+        await ChromiumSession.create({
+          chromiumOptions: {
+            executablePath: brave.executablePath,
+            profilePath: path.join(profilesBasePath, "br"),
+            headless: false,
+          },
         })
     );
 
@@ -67,6 +82,14 @@ export const runAnalysis = async (config: Config) => {
             console.log(e); // TODO: persist error log
           }
         })(),
+        (async () => {
+          try {
+            const result = await brSession.runAnalysis(url);
+            await persistData(result, outputDir, formatAnalysisName("br"));
+          } catch (e) {
+            console.log(e); // TODO: persist error log
+          }
+        })(),
       ]);
     }
 
@@ -75,7 +98,10 @@ export const runAnalysis = async (config: Config) => {
       await waitForever();
     }
 
-    await tfSession.terminate();
-    await ffSession.terminate();
+    await Promise.allSettled([
+      tfSession.terminate(),
+      ffSession.terminate(),
+      brSession.terminate(),
+    ]);
   });
 };
