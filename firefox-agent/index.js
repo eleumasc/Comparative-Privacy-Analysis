@@ -84,7 +84,7 @@ browser.runtime.onMessage.addListener((message, _, sendResponse) => {
     case "Snapshot": {
       const { isFoxhound } = message;
       sendResponse({
-        frameId: browser.runtime.getFrameId(window),
+        frameId: String(browser.runtime.getFrameId(window)),
         url: document.URL,
         baseUrl: document.baseURI,
         cookies: getCookies(),
