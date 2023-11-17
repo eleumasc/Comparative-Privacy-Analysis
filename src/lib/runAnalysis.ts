@@ -7,6 +7,7 @@ import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Config } from "./Config";
 import { ChromiumSession } from "./analysis/ChromiumSession";
 import path from "path";
+import { FailureAwareSession } from "./analysis/FailureAwareSession";
 
 export const runAnalysis = async (config: Config) => {
   const {
@@ -22,8 +23,13 @@ export const runAnalysis = async (config: Config) => {
   const analysisTime = `${+new Date()}`;
   const outputDir = path.join(outputBasePath, analysisTime);
 
+  const failSafeSession = (sessionFactory: () => Promise<Session>): Session => {
+    const faultAwareSession = new FaultAwareSession(sessionFactory);
+    return new FailureAwareSession(faultAwareSession, { maxAttempts: 5 });
+  };
+
   await useFirefoxController({}, async (firefoxController) => {
-    const tfSession: Session = new FaultAwareSession(
+    const tfSession: Session = failSafeSession(
       async () =>
         await FirefoxSession.create(firefoxController, {
           firefoxOptions: {
@@ -36,7 +42,7 @@ export const runAnalysis = async (config: Config) => {
         })
     );
 
-    const ffSession: Session = new FaultAwareSession(
+    const ffSession: Session = failSafeSession(
       async () =>
         await FirefoxSession.create(firefoxController, {
           firefoxOptions: {
@@ -48,7 +54,7 @@ export const runAnalysis = async (config: Config) => {
         })
     );
 
-    const brSession: Session = new FaultAwareSession(
+    const brSession: Session = failSafeSession(
       async () =>
         await ChromiumSession.create({
           chromiumOptions: {
