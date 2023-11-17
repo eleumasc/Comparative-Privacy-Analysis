@@ -2,12 +2,13 @@ import { Session } from "./analysis/Session";
 import { FirefoxSession } from "./analysis/FirefoxSession";
 import { waitForever } from "./util/async";
 import { useFirefoxController } from "./analysis/useFirefoxController";
-import { persistData } from "./persistData";
 import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Config } from "./Config";
 import { ChromiumSession } from "./analysis/ChromiumSession";
 import path from "path";
 import { FailureAwareSession } from "./analysis/FailureAwareSession";
+import { Logger } from "./Logger";
+import { AnalysisResult } from "./analysis/model";
 
 export const runAnalysis = async (config: Config) => {
   const {
@@ -21,7 +22,7 @@ export const runAnalysis = async (config: Config) => {
   } = config;
 
   const analysisTime = `${+new Date()}`;
-  const outputDir = path.join(outputBasePath, analysisTime);
+  const outputPath = path.join(outputBasePath, analysisTime);
 
   const failSafeSession = (sessionFactory: () => Promise<Session>): Session => {
     const faultAwareSession = new FaultAwareSession(sessionFactory);
@@ -67,15 +68,19 @@ export const runAnalysis = async (config: Config) => {
 
     for (const site of siteList) {
       const url = `http://${site}/`;
-      const formatAnalysisName = (suffix: string) => `${site}+${suffix}`;
+
+      const logger = new Logger(outputPath);
+      const log = (suffix: string, result: AnalysisResult) => {
+        logger.addLogfile(`${site}+${suffix}`, JSON.stringify(result));
+      };
 
       await Promise.allSettled([
         (async () => {
           try {
             const resultA = await tfSession.runAnalysis(url);
+            log("tfA", resultA);
             const resultB = await tfSession.runAnalysis(url);
-            await persistData(resultA, outputDir, formatAnalysisName("tfA"));
-            await persistData(resultB, outputDir, formatAnalysisName("tfB"));
+            log("tfB", resultB);
           } catch (e) {
             console.log(e); // TODO: persist error log
           }
@@ -83,7 +88,7 @@ export const runAnalysis = async (config: Config) => {
         (async () => {
           try {
             const result = await ffSession.runAnalysis(url);
-            await persistData(result, outputDir, formatAnalysisName("ff"));
+            log("ff", result);
           } catch (e) {
             console.log(e); // TODO: persist error log
           }
@@ -91,12 +96,14 @@ export const runAnalysis = async (config: Config) => {
         (async () => {
           try {
             const result = await brSession.runAnalysis(url);
-            await persistData(result, outputDir, formatAnalysisName("br"));
+            log("br", result);
           } catch (e) {
             console.log(e); // TODO: persist error log
           }
         })(),
       ]);
+
+      await logger.persist();
     }
 
     if (debugMode) {
