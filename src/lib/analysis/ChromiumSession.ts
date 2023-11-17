@@ -22,26 +22,29 @@ export class ChromiumSession implements Session {
     const process = async (page: Page): Promise<model.Detail> => {
       let requests: model.Request[] = [];
       page.on("request", (interceptedRequest) => {
-        // @ts-ignore
-        const requestId = interceptedRequest._requestId as string;
-        // @ts-ignore
-        const frameId = interceptedRequest.frame()._id as string;
-        const method = interceptedRequest.method();
-        const url = interceptedRequest.url();
-        const resourceType = interceptedRequest.resourceType();
+        const frame = interceptedRequest.frame();
+        if (frame) {
+          // @ts-ignore
+          const requestId = interceptedRequest._requestId as string;
+          // @ts-ignore
+          const frameId = frame._id as string;
+          const method = interceptedRequest.method();
+          const url = interceptedRequest.url();
+          const resourceType = interceptedRequest.resourceType();
 
-        requests = [
-          ...requests,
-          {
-            requestId,
-            frameId,
-            method,
-            url,
-            resourceType,
-          },
-        ];
+          requests = [
+            ...requests,
+            {
+              requestId,
+              frameId,
+              method,
+              url,
+              resourceType,
+            },
+          ];
 
-        interceptedRequest.continue();
+          interceptedRequest.continue();
+        }
       });
 
       await page.setRequestInterception(true);
