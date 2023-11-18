@@ -1,7 +1,7 @@
 import path from "path";
 import { waitForever } from "./util/async";
 import { Config } from "./Config";
-import { Session } from "./analysis/Session";
+import { Session, SessionEntry } from "./analysis/Session";
 import { useFirefoxController } from "./analysis/useFirefoxController";
 import { FirefoxSession } from "./analysis/FirefoxSession";
 import { ChromiumSession } from "./analysis/ChromiumSession";
@@ -23,45 +23,72 @@ export const runAnalysis = async (config: Config) => {
   const analysisTime = `${+new Date()}`;
   const outputPath = path.join(outputBasePath, analysisTime);
 
-  const failSafeSession = (sessionFactory: () => Promise<Session>): Session => {
-    return new FaultAwareSession(sessionFactory);
-  };
-
   await useFirefoxController({}, async (firefoxController) => {
-    const tfSession: Session = failSafeSession(
-      async () =>
-        await FirefoxSession.create(firefoxController, {
-          firefoxOptions: {
-            executablePath: foxhound.executablePath,
-            profilePath: path.join(profilesBasePath, "tf"),
-            headless: false,
-            trackingProtection: false,
-          },
-          isFoxhound: true,
-        })
-    );
+    const failSafeSession = (
+      sessionFactory: () => Promise<Session>
+    ): Session => {
+      return new FaultAwareSession(sessionFactory);
+    };
 
-    const ffSession: Session = failSafeSession(
-      async () =>
-        await FirefoxSession.create(firefoxController, {
-          firefoxOptions: {
-            executablePath: firefox.executablePath,
-            profilePath: path.join(profilesBasePath, "ff"),
-            headless: false,
-            trackingProtection: true,
-          },
-        })
-    );
+    const createFoxhoundSession = (profileName: string): Session => {
+      return failSafeSession(
+        async () =>
+          await FirefoxSession.create(firefoxController, {
+            firefoxOptions: {
+              executablePath: foxhound.executablePath,
+              profilePath: path.join(profilesBasePath, profileName),
+              headless: false,
+              trackingProtection: false,
+            },
+            isFoxhound: true,
+          })
+      );
+    };
 
-    const brSession: Session = failSafeSession(
-      async () =>
-        await ChromiumSession.create({
-          chromiumOptions: {
-            executablePath: brave.executablePath,
-            profilePath: path.join(profilesBasePath, "br"),
-            headless: false,
-          },
-        })
+    const createFirefoxSession = (profileName: string): Session => {
+      return failSafeSession(
+        async () =>
+          await FirefoxSession.create(firefoxController, {
+            firefoxOptions: {
+              executablePath: firefox.executablePath,
+              profilePath: path.join(profilesBasePath, profileName),
+              headless: false,
+              trackingProtection: true,
+            },
+          })
+      );
+    };
+
+    const createBraveSession = (profileName: string): Session => {
+      return failSafeSession(
+        async () =>
+          await ChromiumSession.create({
+            chromiumOptions: {
+              executablePath: brave.executablePath,
+              profilePath: path.join(profilesBasePath, profileName),
+              headless: false,
+            },
+          })
+      );
+    };
+
+    const sessionRecord: Record<string, Session> = {
+      tf1: createFoxhoundSession("tf1"),
+      tf2: createFoxhoundSession("tf2"),
+      ff1: createFirefoxSession("ff1"),
+      ff2: createFirefoxSession("ff2"),
+      ff3: createFirefoxSession("ff3"),
+      ff4: createFirefoxSession("ff4"),
+      ff5: createFirefoxSession("ff5"),
+      br1: createBraveSession("br1"),
+      br2: createBraveSession("br2"),
+      br3: createBraveSession("br3"),
+      br4: createBraveSession("br4"),
+      br5: createBraveSession("br5"),
+    };
+
+    const sessionEntries: SessionEntry[] = Object.entries(sessionRecord).map(
+      ([name, session]) => ({ name, session })
     );
 
     for (const site of siteList) {
@@ -72,34 +99,18 @@ export const runAnalysis = async (config: Config) => {
         logger.addLogfile(`${site}+${suffix}`, JSON.stringify(result));
       };
 
-      await Promise.allSettled([
-        (async () => {
+      await Promise.allSettled(
+        sessionEntries.map(async ({ name, session }) => {
           try {
-            const resultA = await tfSession.runAnalysis(url);
-            log("tfA", resultA);
-            const resultB = await tfSession.runAnalysis(url);
-            log("tfB", resultB);
+            const resultA = await session.runAnalysis(url);
+            log(`${name}A`, resultA);
+            const resultB = await session.runAnalysis(url);
+            log(`${name}B`, resultB);
           } catch (e) {
             console.log(e); // TODO: persist error log
           }
-        })(),
-        (async () => {
-          try {
-            const result = await ffSession.runAnalysis(url);
-            log("ff", result);
-          } catch (e) {
-            console.log(e); // TODO: persist error log
-          }
-        })(),
-        (async () => {
-          try {
-            const result = await brSession.runAnalysis(url);
-            log("br", result);
-          } catch (e) {
-            console.log(e); // TODO: persist error log
-          }
-        })(),
-      ]);
+        })
+      );
 
       await logger.persist();
     }
@@ -109,10 +120,10 @@ export const runAnalysis = async (config: Config) => {
       await waitForever();
     }
 
-    await Promise.allSettled([
-      tfSession.terminate(),
-      ffSession.terminate(),
-      brSession.terminate(),
-    ]);
+    await Promise.allSettled(
+      sessionEntries.map(async ({ session }) => {
+        await session.terminate();
+      })
+    );
   });
 };
