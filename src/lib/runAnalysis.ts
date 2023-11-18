@@ -8,6 +8,7 @@ import { ChromiumSession } from "./analysis/ChromiumSession";
 import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Logger } from "./Logger";
 import { AnalysisResult } from "./analysis/model";
+import { FailureAwareSession } from "./analysis/FailureAwareSession";
 
 export const runAnalysis = async (config: Config) => {
   const {
@@ -27,7 +28,8 @@ export const runAnalysis = async (config: Config) => {
     const failSafeSession = (
       sessionFactory: () => Promise<Session>
     ): Session => {
-      return new FaultAwareSession(sessionFactory);
+      const faultAwareSession = new FaultAwareSession(sessionFactory);
+      return new FailureAwareSession(faultAwareSession, { maxAttempts: 3 });
     };
 
     const createFoxhoundSession = (profileName: string): Session => {
