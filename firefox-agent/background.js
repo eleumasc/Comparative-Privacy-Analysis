@@ -77,7 +77,7 @@ const navigate = async (tabId, url) => {
     state = STATE_START;
   });
 
-  const onCommitted = filterEvents(() => {
+  const onCommitted = filterEvents(async () => {
     switch (state) {
       case STATE_START:
         state = STATE_COMMITTED;
@@ -101,15 +101,20 @@ const navigate = async (tabId, url) => {
   });
 
   const webNavigation = browser.webNavigation;
-  webNavigation.onBeforeNavigate.addListener(onBeforeNavigate);
-  webNavigation.onCommitted.addListener(onCommitted);
-  webNavigation.onCompleted.addListener(onCompleted);
-  webNavigation.onErrorOccurred.addListener(onErrorOccurred);
+  const webNavigationFilter = { url: [{ schemes: ["http", "https"] }] };
+  webNavigation.onBeforeNavigate.addListener(
+    onBeforeNavigate,
+    webNavigationFilter
+  );
+  webNavigation.onCommitted.addListener(onCommitted, webNavigationFilter);
+  webNavigation.onCompleted.addListener(onCompleted, webNavigationFilter);
+  webNavigation.onErrorOccurred.addListener(
+    onErrorOccurred,
+    webNavigationFilter
+  );
   try {
-    await Promise.all([
-      browser.tabs.update(tabId, { url }),
-      navigateCompleter.promise,
-    ]);
+    await browser.tabs.update(tabId, { url });
+    await navigateCompleter.promise;
   } finally {
     webNavigation.onBeforeNavigate.removeListener(onBeforeNavigate);
     webNavigation.onCommitted.removeListener(onCommitted);
@@ -130,15 +135,7 @@ const useTab = async (callback) => {
 const useNetworkLogging = async (tabId, callback) => {
   const state = { requests: [] };
 
-  const filterEvents = (listener) => {
-    return (details) => {
-      if (details.tabId === tabId) {
-        listener(details);
-      }
-    };
-  };
-
-  const onBeforeRequest = filterEvents((details) => {
+  const onBeforeRequest = (details) => {
     const {
       requestId,
       frameId,
@@ -159,10 +156,10 @@ const useNetworkLogging = async (tabId, callback) => {
         urlClassification,
       },
     ];
-  });
+  };
 
   const webRequest = browser.webRequest;
-  const webRequestFilter = { urls: ["*://*/*"] };
+  const webRequestFilter = { urls: ["*://*/*"], tabId };
   webRequest.onBeforeRequest.addListener(onBeforeRequest, webRequestFilter);
   try {
     await callback(state);
@@ -173,8 +170,8 @@ const useNetworkLogging = async (tabId, callback) => {
 
 const runAnalysis = async ({ url, isFoxhound }) => {
   const process = async (tabId, networkLoggingState) => {
-    await timeBomb(navigate(tabId, url), 30000);
-    await asyncDelay(5000);
+    await timeBomb(navigate(tabId, url), 30_000);
+    await asyncDelay(5_000);
 
     const requests = networkLoggingState.requests;
     const frames = (
