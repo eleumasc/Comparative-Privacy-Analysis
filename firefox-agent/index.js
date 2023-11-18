@@ -66,8 +66,8 @@ const getTaintReports = () => {
       str,
       subframe,
       scriptUrl: stack.source,
-      taint: taint.map((taintRange) => {
-        const { begin, end, flow } = taintRange;
+      taint: taint.map((taintFlow) => {
+        const { begin, end, flow } = taintFlow;
         return {
           begin,
           end,

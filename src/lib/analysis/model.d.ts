@@ -53,5 +53,35 @@ export interface StorageItem {
 }
 
 export interface TaintReport {
-  // TODO: specify
+  loc: string;
+  parentloc: string;
+  referrer: string;
+  scriptUrl: string;
+  sink: string;
+  str: string;
+  subframe: boolean;
+  taint: TaintFlow[];
+}
+
+export interface TaintFlow {
+  begin: number;
+  end: number;
+  operation: TaintOperation;
+}
+
+export interface TaintOperation {
+  arguments: string[];
+  builtin: boolean;
+  location: TaintLocation;
+  operation: string;
+  source: boolean;
+}
+
+export interface TaintLocation {
+  filename: string;
+  function: string;
+  line: number;
+  pos: number;
+  scripthash: string;
+  scriptline: number;
 }
