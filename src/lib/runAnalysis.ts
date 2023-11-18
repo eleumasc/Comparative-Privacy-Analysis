@@ -1,12 +1,11 @@
-import { Session } from "./analysis/Session";
-import { FirefoxSession } from "./analysis/FirefoxSession";
-import { waitForever } from "./util/async";
-import { useFirefoxController } from "./analysis/useFirefoxController";
-import { FaultAwareSession } from "./analysis/FaultAwareSession";
-import { Config } from "./Config";
-import { ChromiumSession } from "./analysis/ChromiumSession";
 import path from "path";
-import { FailureAwareSession } from "./analysis/FailureAwareSession";
+import { waitForever } from "./util/async";
+import { Config } from "./Config";
+import { Session } from "./analysis/Session";
+import { useFirefoxController } from "./analysis/useFirefoxController";
+import { FirefoxSession } from "./analysis/FirefoxSession";
+import { ChromiumSession } from "./analysis/ChromiumSession";
+import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Logger } from "./Logger";
 import { AnalysisResult } from "./analysis/model";
 
@@ -25,8 +24,7 @@ export const runAnalysis = async (config: Config) => {
   const outputPath = path.join(outputBasePath, analysisTime);
 
   const failSafeSession = (sessionFactory: () => Promise<Session>): Session => {
-    const faultAwareSession = new FaultAwareSession(sessionFactory);
-    return new FailureAwareSession(faultAwareSession, { maxAttempts: 5 });
+    return new FaultAwareSession(sessionFactory);
   };
 
   await useFirefoxController({}, async (firefoxController) => {
