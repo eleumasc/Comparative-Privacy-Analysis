@@ -24,8 +24,14 @@ export interface Request {
   frameId: string;
   method: string;
   url: string;
+  body: RequestBody | null;
   resourceType: string;
   urlClassification?: UrlClassification;
+}
+
+export interface RequestBody {
+  formData?: { key: string; value: string }[];
+  raw?: string;
 }
 
 export interface UrlClassification {

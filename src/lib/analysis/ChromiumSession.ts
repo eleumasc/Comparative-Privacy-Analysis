@@ -1,7 +1,8 @@
 import puppeteer, { Browser, Page } from "puppeteer-core";
-import model from "./model";
+import model, { RequestBody } from "./model";
 import { Session } from "./Session";
 import { asyncDelay } from "../util/async";
+import { URLSearchParams } from "url";
 
 export interface ChromiumOptions {
   executablePath: string;
@@ -22,6 +23,25 @@ export class ChromiumSession implements Session {
     const process = async (page: Page): Promise<model.Detail> => {
       let requests: model.Request[] = [];
       page.on("request", (interceptedRequest) => {
+        const processBody = (): RequestBody | null => {
+          const postData = interceptedRequest.postData();
+          if (!postData) {
+            return null;
+          }
+          const contentType = interceptedRequest.headers()["content-type"];
+          // NOTE: multipart/form-data body seems to be unsupported by Puppeteer (see https://github.com/puppeteer/puppeteer/issues/9106)
+          if (contentType.includes("application/x-www-form-urlencoded")) {
+            const searchParams = [...new URLSearchParams(postData)];
+            return {
+              formData: searchParams.map(([key, value]) => ({ key, value })),
+            };
+          } else {
+            return {
+              raw: postData,
+            };
+          }
+        };
+
         const frame = interceptedRequest.frame();
         if (frame) {
           // @ts-ignore
@@ -39,6 +59,7 @@ export class ChromiumSession implements Session {
               frameId,
               method,
               url,
+              body: processBody(),
               resourceType,
             },
           ];

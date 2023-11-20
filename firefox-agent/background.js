@@ -136,6 +136,23 @@ const useNetworkLogging = async (tabId, callback) => {
   const state = { requests: [] };
 
   const onBeforeRequest = (details) => {
+    const processBody = () => {
+      const { requestBody } = details;
+      if (!requestBody) {
+        return null;
+      }
+      if (requestBody.formData) {
+        return {
+          formData: Object.entries(requestBody.formData).flatMap(
+            ([key, values]) => values.map((value) => ({ key, value }))
+          ),
+        };
+      } else {
+        const decoder = new TextDecoder("utf-8");
+        return requestBody.raw.map((buffer) => decoder.decode(buffer)).join("");
+      }
+    };
+
     const {
       requestId,
       frameId,
@@ -152,6 +169,7 @@ const useNetworkLogging = async (tabId, callback) => {
         frameId: String(frameId),
         method,
         url,
+        body: processBody(),
         resourceType,
         urlClassification,
       },
@@ -160,7 +178,12 @@ const useNetworkLogging = async (tabId, callback) => {
 
   const webRequest = browser.webRequest;
   const webRequestFilter = { urls: ["*://*/*"], tabId };
-  webRequest.onBeforeRequest.addListener(onBeforeRequest, webRequestFilter);
+  const webRequestExtraSpec = ["requestBody"];
+  webRequest.onBeforeRequest.addListener(
+    onBeforeRequest,
+    webRequestFilter,
+    webRequestExtraSpec
+  );
   try {
     await callback(state);
   } finally {
