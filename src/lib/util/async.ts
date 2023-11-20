@@ -30,3 +30,38 @@ export const timeBomb = async <T>(
 export const waitForever = async () => {
   await new Promise(() => {});
 };
+
+export type PromiseResult<T> =
+  | { status: "fulfilled"; value: T }
+  | { status: "rejected"; reason: any };
+
+export const settleWithConcurrencyLimit = async <T>(
+  promiseFactories: (() => Promise<T>)[],
+  concurrencyLimit: number
+): Promise<PromiseResult<T>[]> => {
+  const results: PromiseResult<T>[] = Array(promiseFactories.length);
+  let currentIndex = 0;
+
+  const processNext = async () => {
+    const index = currentIndex++;
+    if (index >= promiseFactories.length) return;
+
+    const promiseFactory = promiseFactories[index];
+    try {
+      const result = await promiseFactory();
+      results[index] = { status: "fulfilled", value: result };
+    } catch (error) {
+      results[index] = { status: "rejected", reason: error };
+    } finally {
+      await processNext();
+    }
+  };
+
+  await Promise.all(
+    new Array(Math.min(concurrencyLimit, promiseFactories.length))
+      .fill(undefined)
+      .map(async () => await processNext())
+  );
+
+  return results;
+};

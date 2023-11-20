@@ -1,5 +1,5 @@
 import path from "path";
-import { waitForever } from "./util/async";
+import { settleWithConcurrencyLimit, waitForever } from "./util/async";
 import { Config } from "./Config";
 import { Session, SessionEntry } from "./analysis/Session";
 import { useFirefoxController } from "./analysis/useFirefoxController";
@@ -9,6 +9,8 @@ import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Logger } from "./Logger";
 import { AnalysisResult } from "./analysis/model";
 import { FailureAwareSession } from "./analysis/FailureAwareSession";
+
+export const DEFAULT_CONCURRENCY_LIMIT = 4;
 
 export const runAnalysis = async (config: Config) => {
   const {
@@ -101,8 +103,8 @@ export const runAnalysis = async (config: Config) => {
         logger.addLogfile(`${site}+${suffix}`, JSON.stringify(result));
       };
 
-      await Promise.allSettled(
-        sessionEntries.map(async ({ name, session }) => {
+      await settleWithConcurrencyLimit<void>(
+        sessionEntries.map(({ name, session }) => async () => {
           try {
             const resultA = await session.runAnalysis(url);
             log(`${name}A`, resultA);
@@ -111,7 +113,8 @@ export const runAnalysis = async (config: Config) => {
           } catch (e) {
             console.log(e); // TODO: persist error log
           }
-        })
+        }),
+        DEFAULT_CONCURRENCY_LIMIT
       );
 
       await logger.persist();
