@@ -54,9 +54,8 @@ const getTaintReports = () => {
   return (
     XPCNativeWrapper(window.wrappedJSObject["$__taintReports"]) || []
   ).map((taintReport) => {
-    const { loc, parentloc, referrer, sink, stack, str, subframe } =
+    const { loc, parentloc, referrer, sink, stack, str, subframe, taint } =
       taintReport;
-    const taint = taintReport.str.taint;
 
     return {
       loc,
@@ -71,9 +70,10 @@ const getTaintReports = () => {
         return {
           begin,
           end,
-          operation: flow.slice(-1)[0] ?? null,
+          operation: flow[flow.length - 1],
         };
       }),
+      sinkOperation: taint[0].flow[1],
     };
   });
 };

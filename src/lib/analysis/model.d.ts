@@ -61,6 +61,7 @@ export interface TaintReport {
   str: string;
   subframe: boolean;
   taint: TaintFlow[];
+  sinkOperation: TaintOperation;
 }
 
 export interface TaintFlow {

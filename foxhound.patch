@@ -1,8 +1,8 @@
 diff --git a/js/src/jsapi.cpp b/js/src/jsapi.cpp
-index 4a57cbdfcc..7ef7282d31 100644
+index 4a57cbdfcc..cd4d24bfc4 100644
 --- a/js/src/jsapi.cpp
 +++ b/js/src/jsapi.cpp
-@@ -4803,27 +4803,33 @@ JS_ReportTaintSink(JSContext* cx, JS::HandleString str, const char* sink, JS::Ha
+@@ -4803,27 +4803,34 @@ JS_ReportTaintSink(JSContext* cx, JS::HandleString str, const char* sink, JS::Ha
      const char* argnames[3] = {"str", "sink", "stack"};
      const char* funbody =
        "if (typeof window !== 'undefined' && typeof document !== 'undefined') {\n"
@@ -49,6 +49,7 @@ index 4a57cbdfcc..7ef7282d31 100644
 +      "    str: str,\n"
 +      "    sink: sink,\n"
 +      "    stack: stack,\n"
++      "    taint: str.taint,\n"
 +      "  };\n"
 +      "  window['$__taintReports'] = [\n"
 +      "    ...(window['$__taintReports'] || []),\n"
