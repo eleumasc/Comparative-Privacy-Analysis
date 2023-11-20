@@ -95,7 +95,7 @@ export const runAnalysis = async (config: Config) => {
       ([name, session]) => ({ name, session })
     );
 
-    for (const site of siteList) {
+    for (const [siteIndex, site] of siteList.entries()) {
       const url = `http://${site}/`;
 
       const logger = new Logger(outputPath);
@@ -103,6 +103,7 @@ export const runAnalysis = async (config: Config) => {
         logger.addLogfile(`${site}+${suffix}`, JSON.stringify(result));
       };
 
+      console.log(`begin analysis ${site} [${siteIndex}]`);
       await settleWithConcurrencyLimit<void>(
         sessionEntries.map(({ name, session }) => async () => {
           try {
@@ -116,6 +117,7 @@ export const runAnalysis = async (config: Config) => {
         }),
         DEFAULT_CONCURRENCY_LIMIT
       );
+      console.log(`end analysis ${site}`);
 
       await logger.persist();
     }
