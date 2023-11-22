@@ -126,6 +126,10 @@ export const classifyFlow = (
   };
 };
 
+export const isTainted = (flow: Flow): boolean => {
+  return flow.cookieKeys.length > 0 || flow.storageItemKeys.length > 0;
+};
+
 export const equalsFlow = (x: Flow, y: Flow): boolean => {
   return (
     x.cookieKeys.length === y.cookieKeys.length &&

@@ -6,6 +6,7 @@ import {
   Flow,
   classifyFlow,
   equalsFlow,
+  isTainted,
 } from "./measurement/Flow";
 import { SiteAnalysisResult } from "./measurement/SiteAnalysisResult";
 import { Frame, Request, TaintReport } from "./model";
@@ -118,9 +119,7 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
             ),
           };
         })
-        .filter((flow) => {
-          return flow.cookieKeys.length > 0 || flow.storageItemKeys.length > 0;
-        }),
+        .filter((flow) => isTainted(flow)),
       equalsFlow
     );
   };
@@ -160,12 +159,9 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
   const statsClassifyResults = (classifyResults: ClassifyResult[]) => {
     return classifyResults.reduce(
       (acc, cur) => {
-        const { cookieKeys, storageItemKeys } = cur.flow;
         return {
           totalFlows: acc.totalFlows + 1,
-          taintedFlows:
-            acc.taintedFlows +
-            (cookieKeys.length > 0 || storageItemKeys.length > 0 ? 1 : 0),
+          taintedFlows: acc.taintedFlows + (isTainted(cur.flow) ? 1 : 0),
           cookieMatchingEffective:
             acc.cookieMatchingEffective + (cur.cookieMatchingEffective ? 1 : 0),
         };
