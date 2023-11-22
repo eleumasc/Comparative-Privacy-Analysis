@@ -48,15 +48,14 @@ export interface Frame {
   taintReports?: TaintReport[];
 }
 
-export interface Cookie {
+export interface KeyValuePair {
   key: string;
   value: string;
 }
 
-export interface StorageItem {
-  key: string;
-  value: string;
-}
+export interface Cookie extends KeyValuePair {}
+
+export interface StorageItem extends KeyValuePair {}
 
 export interface TaintReport {
   loc: string;

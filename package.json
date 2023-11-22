@@ -18,6 +18,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
+    "@algorithm.ts/lcs": "^3.1.1",
     "http": "^0.0.1-security",
     "puppeteer-core": "^21.5.2",
     "web-ext": "^7.8.0",

@@ -1,143 +1,202 @@
+import assert from "assert";
 import { Config } from "./Config";
-import { readFile } from "fs/promises";
-import path from "path";
-import { AnalysisResult } from "./analysis/model";
-
-interface AnalysisResultCollection {
-  site: string;
-  tf1: AnalysisResult;
-  tf2: AnalysisResult;
-  ff1: AnalysisResult;
-  ff2: AnalysisResult;
-  ff3: AnalysisResult;
-  ff4: AnalysisResult;
-  ff5: AnalysisResult;
-  br1: AnalysisResult;
-  br2: AnalysisResult;
-  br3: AnalysisResult;
-  br4: AnalysisResult;
-  br5: AnalysisResult;
-}
+import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
+import {
+  ClassifyResult,
+  Flow,
+  classifyFlow,
+  equalsFlow,
+} from "./measurement/Flow";
+import { SiteAnalysisResult } from "./measurement/SiteAnalysisResult";
+import { Frame, Request, TaintReport } from "./analysis/model";
+import { distinct } from "./util/array";
+import { inspect } from "util";
 
 export const runMeasurement = async (config: Config) => {
-  const { siteList } = config;
+  const { siteList } = config; // TODO: sites.json in results folder
 
-  for await (const resultCollection of readAnalysisResultCollections(
-    siteList,
-    // "/home/osboxes/results/..."
-    ""
-  )) {
-    await processSite(resultCollection);
-  }
-};
-
-const readAnalysisResultCollections = async function* (
-  siteList: string[],
-  outputPath: string
-): AsyncGenerator<AnalysisResultCollection, void> {
   for (const site of siteList) {
-    const readAnalysisResultFromLogfile = async (suffix: string) => {
-      return JSON.parse(
-        (
-          await readFile(path.join(outputPath, `${site}+${suffix}.json`))
-        ).toString()
-      ) as AnalysisResult;
-    };
-
-    yield {
-      site,
-      tf1: await readAnalysisResultFromLogfile("tf1"),
-      tf2: await readAnalysisResultFromLogfile("tf2"),
-      ff1: await readAnalysisResultFromLogfile("ff1"),
-      ff2: await readAnalysisResultFromLogfile("ff2"),
-      ff3: await readAnalysisResultFromLogfile("ff3"),
-      ff4: await readAnalysisResultFromLogfile("ff4"),
-      ff5: await readAnalysisResultFromLogfile("ff5"),
-      br1: await readAnalysisResultFromLogfile("br1"),
-      br2: await readAnalysisResultFromLogfile("br2"),
-      br3: await readAnalysisResultFromLogfile("br3"),
-      br4: await readAnalysisResultFromLogfile("br4"),
-      br5: await readAnalysisResultFromLogfile("br5"),
-    };
+    const siteResult = await SiteAnalysisResult.fromFile(
+      "/home/osboxes/results/1700482812150",
+      site
+    );
+    try {
+      console.log(site, inspect(processSite(siteResult), false, null, true));
+    } catch (e) {
+      console.log(site, String(e));
+    }
   }
 };
 
-const processSite = async (
-  resultCollection: AnalysisResultCollection
-): Promise<void> => {
-  const { site, tf1, tf2, ff1, ff2, ff3, ff4, ff5, br1, br2, br3, br4, br5 } =
-    resultCollection;
-
-  if (
-    tf1.status === "failure" ||
-    tf2.status === "failure" ||
-    ff1.status === "failure" ||
-    ff2.status === "failure" ||
-    ff3.status === "failure" ||
-    ff4.status === "failure" ||
-    ff5.status === "failure" ||
-    br1.status === "failure" ||
-    br2.status === "failure" ||
-    br3.status === "failure" ||
-    br4.status === "failure" ||
-    br5.status === "failure"
-  ) {
-    return;
+const processSite = (siteResult: SiteAnalysisResult): any => {
+  try {
+    assert(
+      siteResult.all().every((result) => result.status === "success"),
+      "Not all results are successful"
+    );
+  } catch {
+    if (siteResult.all().every((result) => result.status === "failure")) {
+      throw new Error("Navigation error");
+    } else {
+      throw new Error("Analysis error");
+    }
   }
+
+  const tf1A = siteResult.selectSuccess({
+    browserId: "foxhound",
+    sequence: 1,
+    runId: "A",
+  })[0];
+  const tf1B = siteResult.selectSuccess({
+    browserId: "foxhound",
+    sequence: 1,
+    runId: "B",
+  })[0];
+  const tf2A = siteResult.selectSuccess({
+    browserId: "foxhound",
+    sequence: 2,
+    runId: "A",
+  })[0];
+
+  const tf1AFrame = tf1A.detail.frames[0]; // TODO: consider subframes?
+  assert(typeof tf1AFrame !== "undefined", "Frame does not exist");
+  // const tf1BFrame = tf1B.detail.frames.find(
+  //   (frame) => frame.url === tf1AFrame.url
+  // );
+  // const tf2AFrame = tf2A.detail.frames.find(
+  //   (frame) => frame.url === tf1AFrame.url
+  // );
+  const tf1BFrame = tf1B.detail.frames[0];
+  const tf2AFrame = tf2A.detail.frames[0];
+  assert(
+    typeof tf1BFrame !== "undefined" && typeof tf2AFrame !== "undefined",
+    "Frame matching failed"
+  );
+
+  const trackingCookieKeys = cookieSwapPartyHeuristics(
+    tf1AFrame.cookies,
+    tf1BFrame.cookies,
+    tf2AFrame.cookies,
+    true
+  );
+  const trackingStorageItemKeys = cookieSwapPartyHeuristics(
+    tf1AFrame.storageItems,
+    tf1BFrame.storageItems,
+    tf2AFrame.storageItems
+  );
+
+  const computeClassifyResults = (
+    taintReports: TaintReport[],
+    frame: Frame
+  ): ClassifyResult[] => {
+    return taintReports.flatMap((taintReport) => {
+      try {
+        return [classifyFlow(taintReport, frame)];
+      } catch {
+        return [];
+      }
+    });
+  };
+
+  const taintReportsA = tf1AFrame.taintReports!;
+  const classifyResultsA = computeClassifyResults(taintReportsA, tf1AFrame);
+  const taintReportsB = tf1BFrame.taintReports!;
+  const classifyResultsB = computeClassifyResults(taintReportsB, tf1BFrame);
+
+  const computeTrackingFlows = (classifyResults: ClassifyResult[]): Flow[] => {
+    return distinct(
+      classifyResults
+        .map(({ flow }) => flow)
+        .map((flow): Flow => {
+          return {
+            ...flow,
+            cookieKeys: flow.cookieKeys.filter((key) =>
+              trackingCookieKeys.includes(key)
+            ),
+            storageItemKeys: flow.storageItemKeys.filter((key) =>
+              trackingStorageItemKeys.includes(key)
+            ),
+          };
+        })
+        .filter((flow) => {
+          return flow.cookieKeys.length > 0 || flow.storageItemKeys.length > 0;
+        }),
+      equalsFlow
+    );
+  };
+
+  const trackingFlowsA = computeTrackingFlows(classifyResultsA);
+  const trackingFlowsB = computeTrackingFlows(classifyResultsB);
+  const trackingFlowsUnion = distinct(
+    [...trackingFlowsA, ...trackingFlowsB],
+    equalsFlow
+  );
+
+  const computeAllowedTargets = (requests: Request[]): string[] => {
+    return distinct(
+      requests
+        .filter((request) => request.resourceType === "script")
+        .map((request) => new URL(request.url).hostname)
+    );
+  };
+
+  const allowedTargetsA = computeAllowedTargets(tf1A.detail.requests);
+  const allowedTargetsB = computeAllowedTargets(tf1B.detail.requests);
+  const allowedTargetsUnion = distinct([
+    ...allowedTargetsA,
+    ...allowedTargetsB,
+  ]);
+
+  let ssTrackingFlows: Flow[] = [];
+  let cdssTrackingFlows: Flow[] = [];
+  for (const flow of trackingFlowsUnion) {
+    if (allowedTargetsUnion.includes(flow.targetHostname)) {
+      ssTrackingFlows = [...ssTrackingFlows, flow];
+    } else {
+      cdssTrackingFlows = [...cdssTrackingFlows, flow];
+    }
+  }
+
+  const statsClassifyResults = (classifyResults: ClassifyResult[]) => {
+    return classifyResults.reduce(
+      (acc, cur) => {
+        const { cookieKeys, storageItemKeys } = cur.flow;
+        return {
+          taintedFlows:
+            acc.taintedFlows +
+            (cookieKeys.length > 0 || storageItemKeys.length > 0 ? 1 : 0),
+          totalCookieSourcesCount:
+            acc.totalCookieSourcesCount + cur.totalCookieSourcesCount,
+          unmatchableCookieSourcesCount:
+            acc.unmatchableCookieSourcesCount +
+            cur.unmatchableCookieSourcesCount,
+          unmatchedCookieSourcesCount:
+            acc.unmatchedCookieSourcesCount + cur.unmatchedCookieSourcesCount,
+        };
+      },
+      {
+        taintedFlows: 0,
+        totalCookieSourcesCount: 0,
+        unmatchableCookieSourcesCount: 0,
+        unmatchedCookieSourcesCount: 0,
+      }
+    );
+  };
+
+  return {
+    // taintReportsA: taintReportsA.length,
+    // taintReportsB: taintReportsB.length,
+
+    // classifyResultsA: statsClassifyResults(classifyResultsA),
+    // classifyResultsB: statsClassifyResults(classifyResultsB),
+
+    // trackingFlowsA: trackingFlowsA.length,
+    // trackingFlowsB: trackingFlowsB.length,
+
+    // trackingFlowsUnion,
+
+    allowedTargetsUnion,
+    ssTrackingFlows,
+    cdssTrackingFlows,
+  };
 };
-
-interface PrivacySensitiveFlow {
-  source: ClientSideIdentifier[];
-  sink: NetworkSink;
-}
-
-interface ClientSideIdentifier {
-  type: "cookie" | "storageItem";
-  key: string;
-  scriptUrl: string;
-}
-
-interface NetworkSink {
-  requestUrl: string;
-  scriptUrl: string;
-}
-
-// const computeNetworkSink = (taintReport: TaintReport) => {
-//   const { sink, str } = taintReport;
-//   switch (sink) {
-//     case "navigator.sendBeacon(url)":
-//       return str;
-//     case "navigator.sendBeacon(body)":
-//       return ...;
-//   }
-// };
-
-// const classifyTaintReport = (
-//   taintReport: TaintReport,
-//   frame: Frame
-// ): PrivacySensitiveFlow | null => {
-//   const { taint } = taintReport;
-
-//   const storageItemCSIs = taint
-//     .filter((taintFlow) => {
-//       const { operation: opType } = taintFlow.operation;
-//       return opType === "localStorage.getItem";
-//     })
-//     .map((taintFlow): ClientSideIdentifier => {
-//       const { arguments: opArgs, location: opLocation } = taintFlow.operation;
-//       const key = opArgs[0];
-//       const scriptUrl = opLocation.filename;
-//       return {
-//         type: "storageItem",
-//         key,
-//         scriptUrl,
-//       };
-//     });
-
-//   const cookieCSIs = taint
-//     .filter((taintFlow) => {
-//       const { operation: opType } = taintFlow.operation;
-//       return opType === "document.cookie";
-//     })
-//     .map((taintFlow): ClientSideIdentifier => {});
-// };
