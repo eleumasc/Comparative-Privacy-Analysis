@@ -162,23 +162,18 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
       (acc, cur) => {
         const { cookieKeys, storageItemKeys } = cur.flow;
         return {
+          totalFlows: acc.totalFlows + 1,
           taintedFlows:
             acc.taintedFlows +
             (cookieKeys.length > 0 || storageItemKeys.length > 0 ? 1 : 0),
-          totalCookieSourcesCount:
-            acc.totalCookieSourcesCount + cur.totalCookieSourcesCount,
-          unmatchableCookieSourcesCount:
-            acc.unmatchableCookieSourcesCount +
-            cur.unmatchableCookieSourcesCount,
-          unmatchedCookieSourcesCount:
-            acc.unmatchedCookieSourcesCount + cur.unmatchedCookieSourcesCount,
+          cookieMatchingEffective:
+            acc.cookieMatchingEffective + (cur.cookieMatchingEffective ? 1 : 0),
         };
       },
       {
+        totalFlows: 0,
         taintedFlows: 0,
-        totalCookieSourcesCount: 0,
-        unmatchableCookieSourcesCount: 0,
-        unmatchedCookieSourcesCount: 0,
+        cookieMatchingEffective: 0,
       }
     );
   };

@@ -4,9 +4,7 @@ import { findLCSubstring } from "../util/findLCSubstring";
 
 export interface ClassifyResult {
   flow: Flow;
-  totalCookieSourcesCount: number;
-  unmatchableCookieSourcesCount: number;
-  unmatchedCookieSourcesCount: number;
+  cookieMatchingEffective: boolean;
 }
 
 export interface Flow {
@@ -91,31 +89,19 @@ export const classifyFlow = (
 
   const { str, sink, taint } = taintReport;
 
-  let totalCookieSourcesCount: number = 0;
-  let unmatchableCookieSourcesCount: number = 0;
-  let unmatchedCookieSourcesCount: number = 0;
+  const cookieSources = taint.filter((taintFlow) => {
+    const { operation: opType } = taintFlow.operation;
+    return opType === "document.cookie";
+  });
   const cookieKeys = distinct(
-    taint
-      .filter((taintFlow) => {
-        const { operation: opType } = taintFlow.operation;
-        return opType === "document.cookie";
-      })
-      .flatMap((taintFlow): string[] => {
-        totalCookieSourcesCount += 1;
-        const matches = findMatchingCookieKeys(
+    cookieSources.flatMap((taintFlow): string[] => {
+      return (
+        findMatchingCookieKeys(
           str.substring(taintFlow.begin, taintFlow.end),
           frame.cookies
-        );
-        if (!matches) {
-          unmatchableCookieSourcesCount += 1;
-          return [];
-        } else if (matches.length === 0) {
-          unmatchedCookieSourcesCount += 1;
-          return [];
-        } else {
-          return matches;
-        }
-      })
+        ) ?? []
+      );
+    })
   );
 
   const storageItemKeys = distinct(
@@ -135,9 +121,8 @@ export const classifyFlow = (
       targetHostname: sinkTargetURL.hostname,
       sinkScriptUrl: sinkScriptURL.origin + sinkScriptURL.pathname,
     },
-    totalCookieSourcesCount,
-    unmatchableCookieSourcesCount,
-    unmatchedCookieSourcesCount,
+    cookieMatchingEffective:
+      cookieKeys.length > 0 || cookieSources.length === 0,
   };
 };
 
