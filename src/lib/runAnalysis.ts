@@ -6,8 +6,8 @@ import { useFirefoxController } from "./analysis/useFirefoxController";
 import { FirefoxSession } from "./analysis/FirefoxSession";
 import { ChromiumSession } from "./analysis/ChromiumSession";
 import { FaultAwareSession } from "./analysis/FaultAwareSession";
-import { Logger } from "./Logger";
-import { AnalysisResult } from "./analysis/model";
+import { Logger } from "./analysis/Logger";
+import { AnalysisResult } from "./model";
 import { FailureAwareSession } from "./analysis/FailureAwareSession";
 
 export const DEFAULT_CONCURRENCY_LIMIT = 4;

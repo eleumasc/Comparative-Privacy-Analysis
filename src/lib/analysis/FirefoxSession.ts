@@ -1,5 +1,5 @@
 import { ChildProcess } from "child_process";
-import model from "./model";
+import model from "../model";
 import { Session } from "./Session";
 import { FirefoxOptions, spawnFirefox } from "./spawnFirefox";
 import { timeBomb } from "../util/async";

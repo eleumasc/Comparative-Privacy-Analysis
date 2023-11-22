@@ -1,5 +1,5 @@
 import assert from "assert";
-import model from "./model";
+import model from "../model";
 import { Session } from "./Session";
 
 export interface FailureAwareSessionOptions {

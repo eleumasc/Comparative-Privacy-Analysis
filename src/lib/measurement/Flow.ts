@@ -1,4 +1,4 @@
-import { Cookie, Frame, TaintReport } from "../analysis/model";
+import { Cookie, Frame, TaintReport } from "../model";
 import { distinct } from "../util/array";
 import { findLCSubstring } from "../util/findLCSubstring";
 

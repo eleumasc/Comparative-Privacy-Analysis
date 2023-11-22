@@ -1,4 +1,4 @@
-import { KeyValuePair } from "../analysis/model";
+import { KeyValuePair } from "../model";
 import { significantlyDifferent } from "./significantlyDifferent";
 
 export const cookieSwapPartyHeuristics = (

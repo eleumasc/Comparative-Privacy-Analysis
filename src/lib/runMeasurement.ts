@@ -8,7 +8,7 @@ import {
   equalsFlow,
 } from "./measurement/Flow";
 import { SiteAnalysisResult } from "./measurement/SiteAnalysisResult";
-import { Frame, Request, TaintReport } from "./analysis/model";
+import { Frame, Request, TaintReport } from "./model";
 import { distinct } from "./util/array";
 import { inspect } from "util";
 

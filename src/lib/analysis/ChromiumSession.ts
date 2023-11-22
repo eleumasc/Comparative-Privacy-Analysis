@@ -1,5 +1,5 @@
 import puppeteer, { Browser, Page } from "puppeteer-core";
-import model, { RequestBody } from "./model";
+import model, { RequestBody } from "../model";
 import { Session } from "./Session";
 import { asyncDelay } from "../util/async";
 import { URLSearchParams } from "url";

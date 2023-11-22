@@ -1,5 +1,5 @@
 import { Session } from "./Session";
-import model from "./model";
+import model from "../model";
 
 export class FaultAwareSession implements Session {
   private session: Session | null = null;

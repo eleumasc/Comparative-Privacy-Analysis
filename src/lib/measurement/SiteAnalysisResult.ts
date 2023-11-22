@@ -1,5 +1,5 @@
 import { readFile } from "fs/promises";
-import { AnalysisResult, SuccessfulAnalysisResult } from "../analysis/model";
+import { AnalysisResult, SuccessfulAnalysisResult } from "../model";
 import path from "path";
 import assert from "assert";
 
