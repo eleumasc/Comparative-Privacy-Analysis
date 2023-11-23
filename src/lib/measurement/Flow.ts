@@ -1,6 +1,7 @@
 import { Cookie, Frame, TaintReport } from "../model";
 import { distinct } from "../util/array";
 import { findLCSubstring } from "../util/findLCSubstring";
+import { getSiteFromHostname } from "./getSiteFromHostname";
 
 export interface ClassifyResult {
   flow: Flow;
@@ -11,7 +12,7 @@ export interface Flow {
   cookieKeys: string[];
   storageItemKeys: string[];
   sink: string;
-  targetHostname: string;
+  targetSite: string;
   sinkScriptUrl: string;
 }
 
@@ -118,7 +119,7 @@ export const classifyFlow = (
       cookieKeys,
       storageItemKeys,
       sink,
-      targetHostname: sinkTargetURL.hostname,
+      targetSite: getSiteFromHostname(sinkTargetURL.hostname),
       sinkScriptUrl: sinkScriptURL.origin + sinkScriptURL.pathname,
     },
     cookieMatchingEffective:
@@ -137,7 +138,7 @@ export const equalsFlow = (x: Flow, y: Flow): boolean => {
     x.storageItemKeys.length === y.storageItemKeys.length &&
     x.storageItemKeys.every((xKey) => y.storageItemKeys.includes(xKey)) &&
     x.sink === y.sink &&
-    x.targetHostname === y.targetHostname &&
+    x.targetSite === y.targetSite &&
     x.sinkScriptUrl === y.sinkScriptUrl
   );
 };

@@ -1,7 +1,6 @@
 import { readFile } from "fs/promises";
 import { AnalysisResult, SuccessfulAnalysisResult } from "../model";
 import path from "path";
-import assert from "assert";
 
 export const BrowserId = ["foxhound", "firefox", "brave"] as const;
 
@@ -13,7 +12,7 @@ export type RunId = (typeof RunId)[number];
 
 export interface AnalysisResultLabel {
   browserId: BrowserId;
-  sequence: number;
+  index: number;
   runId: RunId;
 }
 
@@ -40,8 +39,7 @@ export class SiteAnalysisResult {
         return (
           (typeof query.browserId === "undefined" ||
             query.browserId === label.browserId) &&
-          (typeof query.sequence === "undefined" ||
-            query.sequence === label.sequence) &&
+          (typeof query.index === "undefined" || query.index === label.index) &&
           (typeof query.runId === "undefined" || query.runId === label.runId)
         );
       })
@@ -69,16 +67,16 @@ export class SiteAnalysisResult {
 
     const entry = async (
       browserId: BrowserId,
-      sequence: number,
+      index: number,
       runId: RunId
     ): Promise<SiteAnalysisResultEntry> => {
-      const suffix = `${browserSuffixPart(browserId)}${sequence}${runId}`;
+      const suffix = `${browserSuffixPart(browserId)}${index}${runId}`;
       const result = JSON.parse(
         (
           await readFile(path.join(outputPath, `${site}+${suffix}.json`))
         ).toString()
       ) as AnalysisResult;
-      return { label: { browserId, sequence, runId }, result };
+      return { label: { browserId, index, runId }, result };
     };
 
     return new SiteAnalysisResult(

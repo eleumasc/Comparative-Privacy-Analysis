@@ -12,6 +12,7 @@ import { SiteAnalysisResult } from "./measurement/SiteAnalysisResult";
 import { Frame, Request, TaintReport } from "./model";
 import { distinct } from "./util/array";
 import { inspect } from "util";
+import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 
 export const runMeasurement = async (config: Config) => {
   const { siteList } = config; // TODO: sites.json in results folder
@@ -45,17 +46,17 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
 
   const tf1A = siteResult.selectSuccess({
     browserId: "foxhound",
-    sequence: 1,
+    index: 1,
     runId: "A",
   })[0];
   const tf1B = siteResult.selectSuccess({
     browserId: "foxhound",
-    sequence: 1,
+    index: 1,
     runId: "B",
   })[0];
   const tf2A = siteResult.selectSuccess({
     browserId: "foxhound",
-    sequence: 2,
+    index: 2,
     runId: "A",
   })[0];
 
@@ -104,10 +105,15 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
   const taintReportsB = tf1BFrame.taintReports!;
   const classifyResultsB = computeClassifyResults(taintReportsB, tf1BFrame);
 
-  const computeTrackingFlows = (classifyResults: ClassifyResult[]): Flow[] => {
+  const computeTrackingFlows = (
+    classifyResults: ClassifyResult[],
+    frame: Frame
+  ): Flow[] => {
+    const frameSite = getSiteFromHostname(new URL(frame.url).hostname);
     return distinct(
       classifyResults
         .map(({ flow }) => flow)
+        .filter((flow) => flow.targetSite !== frameSite)
         .map((flow): Flow => {
           return {
             ...flow,
@@ -124,37 +130,84 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
     );
   };
 
-  const trackingFlowsA = computeTrackingFlows(classifyResultsA);
-  const trackingFlowsB = computeTrackingFlows(classifyResultsB);
+  const trackingFlowsA = computeTrackingFlows(classifyResultsA, tf1AFrame);
+  const trackingFlowsB = computeTrackingFlows(classifyResultsB, tf1BFrame);
   const trackingFlowsUnion = distinct(
     [...trackingFlowsA, ...trackingFlowsB],
     equalsFlow
   );
 
-  const computeAllowedTargets = (requests: Request[]): string[] => {
+  const computeAllowedTargets = (
+    requests: Request[],
+    frameId: string
+  ): string[] => {
     return distinct(
       requests
+        .filter((request) => request.frameId === frameId)
         .filter((request) => request.resourceType === "script")
-        .map((request) => new URL(request.url).hostname)
+        .map((request) => getSiteFromHostname(new URL(request.url).hostname))
     );
   };
 
-  const allowedTargetsA = computeAllowedTargets(tf1A.detail.requests);
-  const allowedTargetsB = computeAllowedTargets(tf1B.detail.requests);
-  const allowedTargetsUnion = distinct([
-    ...allowedTargetsA,
-    ...allowedTargetsB,
+  const allowedTargetSitesA = computeAllowedTargets(
+    tf1A.detail.requests,
+    tf1AFrame.frameId
+  );
+  const allowedTargetSitesB = computeAllowedTargets(
+    tf1B.detail.requests,
+    tf1BFrame.frameId
+  );
+  const allowedTargetSitesUnion = distinct([
+    ...allowedTargetSitesA,
+    ...allowedTargetSitesB,
   ]);
 
   let ssTrackingFlows: Flow[] = [];
   let cdssTrackingFlows: Flow[] = [];
   for (const flow of trackingFlowsUnion) {
-    if (allowedTargetsUnion.includes(flow.targetHostname)) {
+    if (allowedTargetSitesUnion.includes(flow.targetSite)) {
       ssTrackingFlows = [...ssTrackingFlows, flow];
     } else {
       cdssTrackingFlows = [...cdssTrackingFlows, flow];
     }
   }
+
+  const brXY = siteResult.selectSuccess({ browserId: "brave" });
+  const brFrames = brXY.map((br) => br.detail.frames[0]);
+  const brCookieKeys = distinct(
+    brFrames.flatMap((frame) => frame.cookies.map(({ key }) => key))
+  );
+  const brStorageItemKeys = distinct(
+    brFrames.flatMap((frame) => frame.storageItems.map(({ key }) => key))
+  );
+  const brRequests = brXY.flatMap((br) =>
+    br.detail.requests
+      .filter((request) => request.frameId === br.detail.frames[0].frameId)
+      .filter((request) => {
+        const requestURL = new URL(request.url);
+        return (
+          requestURL.protocol === "http:" || requestURL.protocol === "https:"
+        );
+      })
+  );
+  const brTargetSites = brRequests.map((request) =>
+    getSiteFromHostname(new URL(request.url).hostname)
+  );
+  const brIncludedScripts = distinct(
+    brRequests
+      .filter((request) => request.resourceType === "script")
+      .map((request) => {
+        const scriptURL = new URL(request.url);
+        return scriptURL.origin + scriptURL.pathname;
+      })
+  );
+  const brTrackingFlows = trackingFlowsUnion.filter(
+    (flow) =>
+      flow.cookieKeys.some((key) => brCookieKeys.includes(key)) ||
+      flow.storageItemKeys.some((key) => brStorageItemKeys.includes(key)) ||
+      brTargetSites.includes(flow.targetSite) ||
+      brIncludedScripts.includes(flow.sinkScriptUrl)
+  );
 
   const statsClassifyResults = (classifyResults: ClassifyResult[]) => {
     return classifyResults.reduce(
@@ -184,10 +237,26 @@ const processSite = (siteResult: SiteAnalysisResult): any => {
     // trackingFlowsA: trackingFlowsA.length,
     // trackingFlowsB: trackingFlowsB.length,
 
+    // trackingCookieKeys,
+    // trackingStorageItemKeys,
     // trackingFlowsUnion,
 
-    allowedTargetsUnion,
-    ssTrackingFlows,
-    cdssTrackingFlows,
+    // allowedTargetSitesUnion,
+    // ssTrackingFlows,
+    // cdssTrackingFlows,
+
+    trackingFlowsUnion: trackingFlowsUnion.length,
+    brTrackingFlows: brTrackingFlows.length,
+
+    // trackingCookieKeys,
+    // brCookieKeys: trackingCookieKeys.filter((key) =>
+    //   brCookieKeys.includes(key)
+    // ),
+    // trackingStorageItemKeys,
+    // brStorageItemKeys: trackingStorageItemKeys.filter((key) =>
+    //   brStorageItemKeys.includes(key)
+    // ),
+    // trackingFlowsUnion,
+    // brTrackingFlows,
   };
 };
