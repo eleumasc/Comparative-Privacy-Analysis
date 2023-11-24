@@ -1,4 +1,6 @@
-import puppeteer, { Browser, Page } from "puppeteer-core";
+import puppeteer from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import { Browser, Page } from "puppeteer-core";
 import model, { RequestBody } from "../model";
 import { Session } from "./Session";
 import { asyncDelay } from "../util/async";
@@ -43,7 +45,9 @@ export class ChromiumSession implements Session {
         };
 
         const frame = interceptedRequest.frame();
-        if (frame) {
+        const requestURL = new URL(interceptedRequest.url());
+        const { protocol } = requestURL;
+        if (frame && (protocol === "http:" || protocol === "https:")) {
           // @ts-ignore
           const requestId = interceptedRequest._requestId as string;
           // @ts-ignore
@@ -63,11 +67,10 @@ export class ChromiumSession implements Session {
               resourceType,
             },
           ];
-
-          interceptedRequest.continue();
         }
-      });
 
+        interceptedRequest.continue();
+      });
       await page.setRequestInterception(true);
 
       await page.goto(url, { timeout: 30_000 });
@@ -84,6 +87,7 @@ export class ChromiumSession implements Session {
           frames = [...frames, { frameId, ...evalResult }];
         } catch {}
       }
+
       return { requests, frames };
     };
 
@@ -104,6 +108,7 @@ export class ChromiumSession implements Session {
 
   static async create(options: ChromiumSessionOptions) {
     const { chromiumOptions } = options;
+    puppeteer.use(StealthPlugin());
     const browser = await puppeteer.launch({
       executablePath: chromiumOptions.executablePath,
       userDataDir: chromiumOptions.profilePath,
