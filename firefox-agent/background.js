@@ -133,7 +133,7 @@ const useTab = async (callback) => {
 };
 
 const useNetworkLogging = async (tabId, callback) => {
-  const state = { requests: [] };
+  const state = { requests: [], blockedRequests: [] };
 
   const onBeforeRequest = (details) => {
     const processBody = () => {
@@ -148,8 +148,13 @@ const useNetworkLogging = async (tabId, callback) => {
           ),
         };
       } else {
-        const decoder = new TextDecoder("utf-8");
-        return requestBody.raw.map((buffer) => decoder.decode(buffer)).join("");
+        const bytes = requestBody.raw[0]?.bytes;
+        if (bytes) {
+          const decoder = new TextDecoder("utf-8");
+          return { raw: decoder.decode(bytes) };
+        } else {
+          return null;
+        }
       }
     };
 
@@ -176,6 +181,36 @@ const useNetworkLogging = async (tabId, callback) => {
     ];
   };
 
+  const onErrorOccurred = (details) => {
+    const isTrackingProtectionError = (error) => {
+      switch (error) {
+        case "NS_ERROR_MALWARE_URI":
+        case "NS_ERROR_PHISHING_URI":
+        case "NS_ERROR_TRACKING_URI":
+        case "NS_ERROR_UNWANTED_URI":
+        case "NS_ERROR_BLOCKED_URI":
+        case "NS_ERROR_HARMFUL_URI":
+        case "NS_ERROR_FINGERPRINTING_URI":
+        case "NS_ERROR_CRYPTOMINING_URI":
+        case "NS_ERROR_SOCIALTRACKING_URI":
+          return true;
+        default:
+          return false;
+      }
+    };
+
+    const { requestId: blockedRequestId, error } = details;
+    if (isTrackingProtectionError(error)) {
+      const request = state.requests.findLast(
+        ({ requestId }) => requestId === blockedRequestId
+      );
+      state.requests = state.requests.filter(
+        ({ requestId }) => requestId !== blockedRequestId
+      );
+      state.blockedRequests = [...state.blockedRequests, { request, error }];
+    }
+  };
+
   const webRequest = browser.webRequest;
   const webRequestFilter = { urls: ["*://*/*"], tabId };
   const webRequestExtraSpec = ["requestBody"];
@@ -184,10 +219,12 @@ const useNetworkLogging = async (tabId, callback) => {
     webRequestFilter,
     webRequestExtraSpec
   );
+  webRequest.onErrorOccurred.addListener(onErrorOccurred, webRequestFilter);
   try {
     await callback(state);
   } finally {
     webRequest.onBeforeRequest.removeListener(onBeforeRequest);
+    webRequest.onErrorOccurred.removeListener(onErrorOccurred);
   }
 };
 
@@ -196,7 +233,6 @@ const runAnalysis = async ({ url, isFoxhound }) => {
     await timeBomb(navigate(tabId, url), 30_000);
     await asyncDelay(5_000);
 
-    const requests = networkLoggingState.requests;
     const frames = (
       await Promise.all(
         (
@@ -215,7 +251,9 @@ const runAnalysis = async ({ url, isFoxhound }) => {
       )
     ).filter((element) => element !== null);
 
-    return { requests, frames };
+    const { requests, blockedRequests } = networkLoggingState;
+
+    return { requests, blockedRequests, frames };
   };
 
   let result = null;

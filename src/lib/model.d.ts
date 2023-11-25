@@ -16,6 +16,7 @@ export type AnalysisResult = SuccessfulAnalysisResult | FailedAnalysisResult;
 
 export interface Detail {
   requests: Request[];
+  blockedRequests?: BlockedRequest[];
   frames: Frame[];
 }
 
@@ -38,6 +39,22 @@ export interface UrlClassification {
   firstParty: string[];
   thirdParty: string[];
 }
+
+export interface BlockedRequest {
+  request: Request;
+  error: BlockedRequestError;
+}
+
+export type BlockedRequestError =
+  | "NS_ERROR_MALWARE_URI"
+  | "NS_ERROR_PHISHING_URI"
+  | "NS_ERROR_TRACKING_URI"
+  | "NS_ERROR_UNWANTED_URI"
+  | "NS_ERROR_BLOCKED_URI"
+  | "NS_ERROR_HARMFUL_URI"
+  | "NS_ERROR_FINGERPRINTING_URI"
+  | "NS_ERROR_CRYPTOMINING_URI"
+  | "NS_ERROR_SOCIALTRACKING_URI";
 
 export interface Frame {
   frameId: string;
