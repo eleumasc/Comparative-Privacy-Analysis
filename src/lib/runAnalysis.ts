@@ -56,7 +56,7 @@ export const runAnalysis = async (config: Config) => {
 
     const createFirefoxSession = (
       profileName: string,
-      partitionStorage?: boolean
+      noStoragePartitioning?: boolean
     ): Session => {
       return failSafeSession(
         async () =>
@@ -66,18 +66,21 @@ export const runAnalysis = async (config: Config) => {
               profilePath: path.join(profilesBasePath, profileName),
               headless: false,
               trackingProtectionOptions:
-                partitionStorage ?? true
-                  ? TRACKING_PROTECTION_STANDARD
-                  : {
+                noStoragePartitioning ?? false
+                  ? {
                       ...TRACKING_PROTECTION_STANDARD,
                       cookieBehavior: CookieBehavior.REJECT_TRACKERS,
-                    },
+                    }
+                  : TRACKING_PROTECTION_STANDARD,
             },
           })
       );
     };
 
-    const createBraveSession = (profileName: string): Session => {
+    const createBraveSession = (
+      profileName: string,
+      aggressiveShields?: boolean
+    ): Session => {
       return failSafeSession(
         async () =>
           await ChromiumSession.create({
@@ -86,6 +89,7 @@ export const runAnalysis = async (config: Config) => {
               profilePath: path.join(profilesBasePath, profileName),
               headless: false,
             },
+            aggressiveShields,
           })
       );
     };
@@ -98,16 +102,21 @@ export const runAnalysis = async (config: Config) => {
       ff3: createFirefoxSession("ff3"),
       ff4: createFirefoxSession("ff4"),
       ff5: createFirefoxSession("ff5"),
-      fx1: createFirefoxSession("fx1", false),
-      fx2: createFirefoxSession("fx2", false),
-      fx3: createFirefoxSession("fx3", false),
-      fx4: createFirefoxSession("fx4", false),
-      fx5: createFirefoxSession("fx5", false),
+      fx1: createFirefoxSession("fx1", true),
+      fx2: createFirefoxSession("fx2", true),
+      fx3: createFirefoxSession("fx3", true),
+      fx4: createFirefoxSession("fx4", true),
+      fx5: createFirefoxSession("fx5", true),
       br1: createBraveSession("br1"),
       br2: createBraveSession("br2"),
       br3: createBraveSession("br3"),
       br4: createBraveSession("br4"),
       br5: createBraveSession("br5"),
+      bx1: createBraveSession("bx1", true),
+      bx2: createBraveSession("bx2", true),
+      bx3: createBraveSession("bx3", true),
+      bx4: createBraveSession("bx4", true),
+      bx5: createBraveSession("bx5", true),
     };
 
     const sessionEntries: SessionEntry[] = Object.entries(sessionRecord).map(

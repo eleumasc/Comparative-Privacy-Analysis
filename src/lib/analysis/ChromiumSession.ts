@@ -14,6 +14,7 @@ export interface ChromiumOptions {
 
 export interface ChromiumSessionOptions {
   chromiumOptions: ChromiumOptions;
+  aggressiveShields?: boolean;
 }
 
 export class ChromiumSession implements Session {
@@ -115,6 +116,9 @@ export class ChromiumSession implements Session {
       headless: chromiumOptions.headless ?? true,
     });
     await closeUnnecessaryPages(browser);
+    if (options.aggressiveShields ?? false) {
+      await setAggressiveShields(browser);
+    }
     return new ChromiumSession(browser);
   }
 }
@@ -124,6 +128,17 @@ const closeUnnecessaryPages = async (browser: Browser): Promise<void> => {
   for (const page of unnecessaryPages) {
     await page.close();
   }
+};
+
+const setAggressiveShields = async (browser: Browser) => {
+  const page = await browser.newPage();
+  await page.goto("brave://settings/shields");
+  await page.evaluate(`
+chrome.send("setAdControlType", [true]);
+chrome.send("setCosmeticFilteringControlType", ["block"]);
+chrome.send("setFingerprintingControlType", ["block"]);
+`);
+  await page.close();
 };
 
 const EVAL_FUNCTION = `() => {
