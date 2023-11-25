@@ -9,6 +9,11 @@ import { FaultAwareSession } from "./analysis/FaultAwareSession";
 import { Logger } from "./analysis/Logger";
 import { AnalysisResult } from "./model";
 import { FailureAwareSession } from "./analysis/FailureAwareSession";
+import {
+  CookieBehavior,
+  TRACKING_PROTECTION_DISABLED,
+  TRACKING_PROTECTION_STANDARD,
+} from "./analysis/spawnFirefox";
 
 export const DEFAULT_CONCURRENCY_LIMIT = 4;
 
@@ -42,14 +47,17 @@ export const runAnalysis = async (config: Config) => {
               executablePath: foxhound.executablePath,
               profilePath: path.join(profilesBasePath, profileName),
               headless: false,
-              trackingProtection: false,
+              trackingProtectionOptions: TRACKING_PROTECTION_DISABLED,
             },
             isFoxhound: true,
           })
       );
     };
 
-    const createFirefoxSession = (profileName: string): Session => {
+    const createFirefoxSession = (
+      profileName: string,
+      partitionStorage?: boolean
+    ): Session => {
       return failSafeSession(
         async () =>
           await FirefoxSession.create(firefoxController, {
@@ -57,7 +65,13 @@ export const runAnalysis = async (config: Config) => {
               executablePath: firefox.executablePath,
               profilePath: path.join(profilesBasePath, profileName),
               headless: false,
-              trackingProtection: true,
+              trackingProtectionOptions:
+                partitionStorage ?? true
+                  ? TRACKING_PROTECTION_STANDARD
+                  : {
+                      ...TRACKING_PROTECTION_STANDARD,
+                      cookieBehavior: CookieBehavior.REJECT_TRACKERS,
+                    },
             },
           })
       );
@@ -84,6 +98,11 @@ export const runAnalysis = async (config: Config) => {
       ff3: createFirefoxSession("ff3"),
       ff4: createFirefoxSession("ff4"),
       ff5: createFirefoxSession("ff5"),
+      fx1: createFirefoxSession("fx1", false),
+      fx2: createFirefoxSession("fx2", false),
+      fx3: createFirefoxSession("fx3", false),
+      fx4: createFirefoxSession("fx4", false),
+      fx5: createFirefoxSession("fx5", false),
       br1: createBraveSession("br1"),
       br2: createBraveSession("br2"),
       br3: createBraveSession("br3"),
