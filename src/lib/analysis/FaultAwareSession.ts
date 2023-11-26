@@ -13,8 +13,7 @@ export class FaultAwareSession implements Session {
       try {
         return await currentSession.runAnalysis(url);
       } catch (e) {
-        currentSession.terminate(true);
-        this.session = null;
+        this.terminate(true);
         throw e;
       }
     };
@@ -28,5 +27,6 @@ export class FaultAwareSession implements Session {
 
   async terminate(force?: boolean): Promise<void> {
     await this.session?.terminate(force);
+    this.session = null;
   }
 }
