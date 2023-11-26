@@ -95,28 +95,51 @@ export const runAnalysis = async (config: Config) => {
     };
 
     const sessionRecord: Record<string, Session> = {
+      // tf1: createFoxhoundSession("tf1"),
+      // tf2: createFoxhoundSession("tf2"),
+      // ff1: createFirefoxSession("ff1"),
+      // ff2: createFirefoxSession("ff2"),
+      // ff3: createFirefoxSession("ff3"),
+      // ff4: createFirefoxSession("ff4"),
+      // ff5: createFirefoxSession("ff5"),
+      // fx1: createFirefoxSession("fx1", true),
+      // fx2: createFirefoxSession("fx2", true),
+      // fx3: createFirefoxSession("fx3", true),
+      // fx4: createFirefoxSession("fx4", true),
+      // fx5: createFirefoxSession("fx5", true),
+      // br1: createBraveSession("br1"),
+      // br2: createBraveSession("br2"),
+      // br3: createBraveSession("br3"),
+      // br4: createBraveSession("br4"),
+      // br5: createBraveSession("br5"),
+      // bx1: createBraveSession("bx1", true),
+      // bx2: createBraveSession("bx2", true),
+      // bx3: createBraveSession("bx3", true),
+      // bx4: createBraveSession("bx4", true),
+      // bx5: createBraveSession("bx5", true),
+
       tf1: createFoxhoundSession("tf1"),
       tf2: createFoxhoundSession("tf2"),
-      ff1: createFirefoxSession("ff1"),
-      ff2: createFirefoxSession("ff2"),
-      ff3: createFirefoxSession("ff3"),
-      ff4: createFirefoxSession("ff4"),
-      ff5: createFirefoxSession("ff5"),
-      fx1: createFirefoxSession("fx1", true),
-      fx2: createFirefoxSession("fx2", true),
-      fx3: createFirefoxSession("fx3", true),
-      fx4: createFirefoxSession("fx4", true),
-      fx5: createFirefoxSession("fx5", true),
       br1: createBraveSession("br1"),
       br2: createBraveSession("br2"),
+      ff1: createFirefoxSession("ff1"),
+      ff2: createFirefoxSession("ff2"),
       br3: createBraveSession("br3"),
       br4: createBraveSession("br4"),
+      ff3: createFirefoxSession("ff3"),
+      ff4: createFirefoxSession("ff4"),
       br5: createBraveSession("br5"),
       bx1: createBraveSession("bx1", true),
+      ff5: createFirefoxSession("ff5"),
+      fx1: createFirefoxSession("fx1", true),
       bx2: createBraveSession("bx2", true),
       bx3: createBraveSession("bx3", true),
+      fx2: createFirefoxSession("fx2", true),
+      fx3: createFirefoxSession("fx3", true),
       bx4: createBraveSession("bx4", true),
       bx5: createBraveSession("bx5", true),
+      fx4: createFirefoxSession("fx4", true),
+      fx5: createFirefoxSession("fx5", true),
     };
 
     const sessionEntries: SessionEntry[] = Object.entries(sessionRecord).map(
@@ -131,7 +154,7 @@ export const runAnalysis = async (config: Config) => {
         logger.addLogfile(`${site}+${suffix}`, JSON.stringify(result));
       };
 
-      console.log(`begin analysis ${site} [${siteIndex}]`);
+      console.log(`begin analysis ${site} [${siteIndex}] (${Date()})`);
       await settleWithConcurrencyLimit<void>(
         sessionEntries.map(({ name, session }) => async () => {
           try {
@@ -141,6 +164,8 @@ export const runAnalysis = async (config: Config) => {
             log(`${name}B`, resultB);
           } catch (e) {
             console.log(e); // TODO: persist error log
+          } finally {
+            await session.terminate();
           }
         }),
         DEFAULT_CONCURRENCY_LIMIT
@@ -155,10 +180,10 @@ export const runAnalysis = async (config: Config) => {
       await waitForever();
     }
 
-    await Promise.allSettled(
-      sessionEntries.map(async ({ session }) => {
-        await session.terminate();
-      })
-    );
+    // await Promise.allSettled(
+    //   sessionEntries.map(async ({ session }) => {
+    //     await session.terminate();
+    //   })
+    // );
   });
 };
