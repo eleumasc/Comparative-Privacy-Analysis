@@ -52,15 +52,17 @@ export class FirefoxSession implements Session {
     const agentId = controller.generateAgentId();
     const connectUrl = controller.getConnectUrl(agentId);
 
-    const willCreate = async () => {
-      const browserProcess = spawnFirefox(options.firefoxOptions, connectUrl);
-      const agent = await controller.waitForAgent(agentId);
-      return new FirefoxSession(agent, browserProcess, options);
-    };
+    const browserProcess = spawnFirefox(options.firefoxOptions, connectUrl);
 
     try {
+      const willCreate = async () => {
+        const agent = await controller.waitForAgent(agentId);
+        return new FirefoxSession(agent, browserProcess, options);
+      };
+
       return await timeBomb(willCreate(), 30_000);
     } catch (e) {
+      browserProcess.kill("SIGINT");
       throw new Error(`Cannot create instance of FirefoxSession: ${e}`);
     }
   }
