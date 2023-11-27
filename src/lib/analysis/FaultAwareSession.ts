@@ -1,17 +1,28 @@
+import assert from "assert";
 import { Session } from "./Session";
 import model from "../model";
+import { timeBomb } from "../util/async";
 
 export class FaultAwareSession implements Session {
   private session: Session | null = null;
 
-  constructor(readonly sessionFactory: () => Promise<Session>) {}
+  constructor(
+    readonly sessionFactory: () => Promise<Session>,
+    readonly timeoutMs?: number
+  ) {}
 
   async runAnalysis(url: string): Promise<model.AnalysisResult> {
     const tryOnce = async () => {
       const currentSession =
         this.session ?? (this.session = await this.sessionFactory.call(null));
+      const timeoutMs = this.timeoutMs;
       try {
-        return await currentSession.runAnalysis(url);
+        if (typeof timeoutMs === "undefined") {
+          return await currentSession.runAnalysis(url);
+        } else {
+          assert(timeoutMs > 0);
+          return await timeBomb(currentSession.runAnalysis(url), timeoutMs);
+        }
       } catch (e) {
         this.terminate(true);
         throw e;
