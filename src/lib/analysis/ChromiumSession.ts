@@ -1,6 +1,4 @@
-import puppeteer from "puppeteer-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import { Browser, Page } from "puppeteer-core";
+import puppeteer, { Browser, Page } from "puppeteer-core";
 import model, { RequestBody } from "../model";
 import { Session } from "./Session";
 import { asyncDelay } from "../util/async";
@@ -74,6 +72,8 @@ export class ChromiumSession implements Session {
       });
       await page.setRequestInterception(true);
 
+      await page.setViewport({ width: 1280, height: 720 });
+
       await page.goto(url, { timeout: 30_000 });
       await asyncDelay(5_000);
 
@@ -109,7 +109,6 @@ export class ChromiumSession implements Session {
 
   static async create(options: ChromiumSessionOptions) {
     const { chromiumOptions } = options;
-    puppeteer.use(StealthPlugin());
     const browser = await puppeteer.launch({
       executablePath: chromiumOptions.executablePath,
       userDataDir: chromiumOptions.profilePath,

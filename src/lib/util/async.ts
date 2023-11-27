@@ -31,37 +31,37 @@ export const waitForever = async () => {
   await new Promise(() => {});
 };
 
-export type PromiseResult<T> =
-  | { status: "fulfilled"; value: T }
-  | { status: "rejected"; reason: any };
-
-export const settleWithConcurrencyLimit = async <T>(
+export const allWithConcurrencyLimit = async <T>(
   promiseFactories: (() => Promise<T>)[],
   concurrencyLimit: number
-): Promise<PromiseResult<T>[]> => {
-  const results: PromiseResult<T>[] = Array(promiseFactories.length);
+): Promise<T[]> => {
+  const results: T[] = Array(promiseFactories.length);
   let currentIndex = 0;
+  let rejected = false;
 
   const processNext = async () => {
+    if (rejected) return;
+
     const index = currentIndex++;
     if (index >= promiseFactories.length) return;
 
     const promiseFactory = promiseFactories[index];
     try {
-      const result = await promiseFactory();
-      results[index] = { status: "fulfilled", value: result };
-    } catch (error) {
-      results[index] = { status: "rejected", reason: error };
-    } finally {
+      results[index] = await promiseFactory();
       await processNext();
+    } catch (e) {
+      rejected = true;
+      throw e;
     }
   };
 
-  await Promise.all(
-    new Array(Math.min(concurrencyLimit, promiseFactories.length))
-      .fill(undefined)
-      .map(async () => await processNext())
-  );
-
-  return results;
+  const jobs = new Array(Math.min(concurrencyLimit, promiseFactories.length))
+    .fill(undefined)
+    .map(() => processNext());
+  try {
+    await Promise.all(jobs);
+    return results;
+  } finally {
+    await Promise.allSettled(jobs);
+  }
 };

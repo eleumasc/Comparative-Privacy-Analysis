@@ -1,5 +1,5 @@
 import path from "path";
-import { settleWithConcurrencyLimit, waitForever } from "./util/async";
+import { allWithConcurrencyLimit, waitForever } from "./util/async";
 import { Config } from "./Config";
 import { Session, SessionEntry } from "./analysis/Session";
 import { useFirefoxController } from "./analysis/useFirefoxController";
@@ -14,8 +14,11 @@ import {
   TRACKING_PROTECTION_DISABLED,
   TRACKING_PROTECTION_STANDARD,
 } from "./analysis/spawnFirefox";
+import { isWebsiteAvailable } from "./util/isWebsiteAvailable";
 
-export const DEFAULT_CONCURRENCY_LIMIT = 4;
+const DEFAULT_CONCURRENCY_LIMIT = 4;
+const DEFAULT_SESSION_TIMEOUT = 90_000;
+const DEFAULT_SESSION_MAX_ATTEMPTS = 3;
 
 export const runAnalysis = async (config: Config) => {
   const {
@@ -35,8 +38,13 @@ export const runAnalysis = async (config: Config) => {
     const failSafeSession = (
       sessionFactory: () => Promise<Session>
     ): Session => {
-      const faultAwareSession = new FaultAwareSession(sessionFactory, 90_000);
-      return new FailureAwareSession(faultAwareSession, { maxAttempts: 3 });
+      const faultAwareSession = new FaultAwareSession(
+        sessionFactory,
+        DEFAULT_SESSION_TIMEOUT
+      );
+      return new FailureAwareSession(faultAwareSession, {
+        maxAttempts: DEFAULT_SESSION_MAX_ATTEMPTS,
+      });
     };
 
     const createFoxhoundSession = (profileName: string): Session => {
@@ -146,44 +154,52 @@ export const runAnalysis = async (config: Config) => {
       ([name, session]) => ({ name, session })
     );
 
+    const logger = new Logger(outputPath);
     for (const [siteIndex, site] of siteList.entries()) {
       const url = `http://${site}/`;
 
-      const logger = new Logger(outputPath);
-      const log = (suffix: string, result: AnalysisResult) => {
-        logger.addLogfile(`${site}+${suffix}`, JSON.stringify(result));
+      const siteLogger = logger.createSiteLogger(site);
+      const logResult = (name: string, result: AnalysisResult) => {
+        siteLogger.addLogfile(name, JSON.stringify(result));
       };
 
       console.log(`begin analysis ${site} [${siteIndex}] (${Date()})`);
-      await settleWithConcurrencyLimit<void>(
-        sessionEntries.map(({ name, session }) => async () => {
-          try {
-            const resultA = await session.runAnalysis(url);
-            log(`${name}A`, resultA);
-            const resultB = await session.runAnalysis(url);
-            log(`${name}B`, resultB);
-          } catch (e) {
-            console.log(e); // TODO: persist error log
-          } finally {
-            await session.terminate();
-          }
-        }),
-        DEFAULT_CONCURRENCY_LIMIT
-      );
+      try {
+        await allWithConcurrencyLimit<void>(
+          sessionEntries.map(({ name: sessionName, session }) => async () => {
+            const runAnalysis = async (runId: string) => {
+              const name = `${sessionName}${runId}`;
+              const result = await session.runAnalysis(url);
+              if (result.status === "success") {
+                logResult(name, result);
+              } else {
+                throw new Error(`failure ${name}`);
+              }
+            };
+
+            try {
+              await runAnalysis("A");
+              await runAnalysis("B");
+            } catch (e) {
+              console.log(e); // TODO: persist error log
+              throw e;
+            } finally {
+              if (debugMode) {
+                console.log("Waiting forever... (you are in debug mode)");
+                await waitForever();
+              }
+              await session.terminate();
+            }
+          }),
+          DEFAULT_CONCURRENCY_LIMIT
+        );
+      } catch {
+        siteLogger.reject(
+          (await isWebsiteAvailable(url)) ? "AnalysisError" : "NavigationError"
+        );
+      }
+      await siteLogger.persist();
       console.log(`end analysis ${site}`);
-
-      await logger.persist();
     }
-
-    if (debugMode) {
-      console.log("Waiting forever... (you are in debug mode)");
-      await waitForever();
-    }
-
-    // await Promise.allSettled(
-    //   sessionEntries.map(async ({ session }) => {
-    //     await session.terminate();
-    //   })
-    // );
   });
 };
