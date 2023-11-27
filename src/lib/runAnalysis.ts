@@ -35,7 +35,7 @@ export const runAnalysis = async (config: Config) => {
     const failSafeSession = (
       sessionFactory: () => Promise<Session>
     ): Session => {
-      const faultAwareSession = new FaultAwareSession(sessionFactory);
+      const faultAwareSession = new FaultAwareSession(sessionFactory, 90_000);
       return new FailureAwareSession(faultAwareSession, { maxAttempts: 3 });
     };
 
