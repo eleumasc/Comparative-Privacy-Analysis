@@ -31,7 +31,10 @@ export class ChromiumSession implements Session {
           }
           const contentType = interceptedRequest.headers()["content-type"];
           // NOTE: multipart/form-data body seems to be unsupported by Puppeteer (see https://github.com/puppeteer/puppeteer/issues/9106)
-          if (contentType.includes("application/x-www-form-urlencoded")) {
+          if (
+            contentType?.includes("application/x-www-form-urlencoded") ??
+            false
+          ) {
             const searchParams = [...new URLSearchParams(postData)];
             return {
               formData: searchParams.map(([key, value]) => ({ key, value })),
