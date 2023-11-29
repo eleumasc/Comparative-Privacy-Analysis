@@ -17,9 +17,11 @@ export class DefaultSessionController implements SessionController {
 
   async runAnalysis(url: string): Promise<model.AnalysisResult> {
     const tryOnce = async () => {
+      const timeoutMs = this.timeoutMs;
+
       const currentSession =
         this.session ?? (this.session = await this.sessionFactory.call(null));
-      const timeoutMs = this.timeoutMs;
+
       try {
         if (typeof timeoutMs === "undefined") {
           return await currentSession.runAnalysis(url);
@@ -40,7 +42,10 @@ export class DefaultSessionController implements SessionController {
   }
 
   async terminate(force?: boolean): Promise<void> {
-    await this.session?.terminate(force);
+    try {
+      await this.session?.terminate(force);
+    } catch {}
+
     this.session = null;
   }
 }
