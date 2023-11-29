@@ -50,6 +50,7 @@ export class DefaultRunner implements Runner {
       }
     };
 
+    const sessionLockRefs = new Map<string, { lock: Promise<void> | null }>();
     const processNextBatch = async (): Promise<boolean> => {
       const { done: noMoreBatches, value: batch } = batchesGenerator.next();
       if (noMoreBatches) {
@@ -57,11 +58,25 @@ export class DefaultRunner implements Runner {
       }
 
       const { siteAnalyses, sessionEntry } = batch;
+
+      const sessionLockRef = getOrCreateMapValue(
+        sessionLockRefs,
+        sessionEntry.name,
+        () => ({ lock: null })
+      );
+      while (sessionLockRef.lock !== null) {
+        await sessionLockRef.lock;
+      }
+      const lockCompleter = new Completer<void>();
+      sessionLockRef.lock = lockCompleter.promise;
+
       for (const siteAnalysis of siteAnalyses) {
         await enqueueAnalysis(siteAnalysis, sessionEntry);
       }
-
       await sessionEntry.controller.terminate();
+
+      sessionLockRef.lock = null;
+      lockCompleter.complete();
 
       return true;
     };
@@ -84,13 +99,15 @@ export class DefaultRunner implements Runner {
         await Promise.race([...siteAnalysisLockSet]);
       }
 
-      const siteAnalysisLockCompleter = new Completer<void>();
-      const siteAnalysisLock = siteAnalysisLockCompleter.promise;
-      siteAnalysisLockSet.add(siteAnalysisLock);
+      const lockCompleter = new Completer<void>();
+      const lock = lockCompleter.promise;
+      siteAnalysisLockSet.add(lock);
+
       await context.runAnalysis(siteAnalysisId, siteEntry, sessionEntry);
       siteAnalysis.notify();
-      siteAnalysisLockSet.delete(siteAnalysisLock);
-      siteAnalysisLockCompleter.complete();
+
+      siteAnalysisLockSet.delete(lock);
+      lockCompleter.complete();
     };
 
     const expectedNotifiedCount = sessionEntries.length;
