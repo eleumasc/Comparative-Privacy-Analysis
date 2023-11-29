@@ -11,6 +11,7 @@ interface SitesEntry {
   site: string;
   failureError: string | null;
   siteIndex: number;
+  startTime: number;
 }
 
 export class Logger {
@@ -37,6 +38,7 @@ export class Logger {
 export class SiteLogger {
   private logfiles: Logfile[] = [];
   private failureError: string | null = null;
+  private startTime = +new Date();
 
   constructor(
     readonly logger: Logger,
@@ -71,6 +73,7 @@ export class SiteLogger {
       site: this.site,
       siteIndex: this.siteIndex,
       failureError: this.failureError,
+      startTime: this.startTime,
     };
     await logger.updateSites(sitesEntry);
   }
