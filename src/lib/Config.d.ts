@@ -5,6 +5,9 @@ export interface Config {
   foxhound: BrowserConfig;
   firefox: BrowserConfig;
   brave: BrowserConfig;
+  concurrencyLevel?: number;
+  coincidenceLevel?: number;
+  batchSize?: number;
   siteList: string[];
 }
 

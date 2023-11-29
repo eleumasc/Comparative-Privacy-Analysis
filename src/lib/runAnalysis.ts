@@ -5,33 +5,34 @@ import { useFirefoxController } from "./analysis/useFirefoxController";
 import { FirefoxSession } from "./analysis/FirefoxSession";
 import { ChromiumSession } from "./analysis/ChromiumSession";
 import { DefaultSessionController } from "./analysis/DefaultSessionController";
-import { Logger, SiteLogger } from "./analysis/Logger";
-import { AnalysisResult } from "./model";
+import { Logger } from "./analysis/Logger";
 import { FailureAwareSessionController } from "./analysis/FailureAwareSessionController";
 import {
   CookieBehavior,
   TRACKING_PROTECTION_DISABLED,
   TRACKING_PROTECTION_STANDARD,
 } from "./analysis/spawnFirefox";
-import { isWebsiteAvailable } from "./util/isWebsiteAvailable";
-import { SchedulingContext, SiteDetail, schedule } from "./analysis/scheduling";
-import { getOrCreateMapValue } from "./util/map";
+import { DefaultRunner } from "./analysis/DefaultRunner";
+import { SiteEntry } from "./analysis/Runner";
+import { DefaultRunnerContext } from "./analysis/DefaultRunnerContext";
 
 const DEFAULT_SESSION_TIMEOUT = 60_000;
 const DEFAULT_SESSION_MAX_ATTEMPTS = 3;
 
-const DEFAULT_CONCURRENCY_LEVEL = 8;
+const DEFAULT_CONCURRENCY_LEVEL = 6;
 const DEFAULT_COINCIDENCE_LEVEL = 4;
 const DEFAULT_BATCH_SIZE = 2;
 
 export const runAnalysis = async (config: Config) => {
   const {
-    debugMode,
     outputBasePath,
     profilesBasePath,
     foxhound,
     firefox,
     brave,
+    concurrencyLevel,
+    coincidenceLevel,
+    batchSize,
     siteList,
   } = config;
 
@@ -154,82 +155,20 @@ export const runAnalysis = async (config: Config) => {
       fx5: ffSessionController("fx5", true),
     }).map(([name, controller]) => ({ name, controller }));
 
+    const siteEntries: SiteEntry[] = siteList.map((site, siteIndex) => ({
+      site,
+      siteIndex,
+      url: `http://${site}/`,
+    }));
+
     const logger = new Logger(outputPath);
-    const schedulingContext = new DefaultSchedulingContext(logger);
-    await schedule(siteList, sessionEntries, schedulingContext, 6, 4, 2);
+    const runner = new DefaultRunner({
+      concurrencyLevel: concurrencyLevel ?? DEFAULT_CONCURRENCY_LEVEL,
+      coincidenceLevel: coincidenceLevel ?? DEFAULT_COINCIDENCE_LEVEL,
+      batchSize: batchSize ?? DEFAULT_BATCH_SIZE,
+    });
+    const runnerContext = new DefaultRunnerContext(logger);
+
+    await runner.runAnalysis(siteEntries, sessionEntries, runnerContext);
   });
 };
-
-interface DefaultSchedulingContextState {
-  siteLogger: SiteLogger;
-  failure: boolean;
-}
-
-class DefaultSchedulingContext implements SchedulingContext {
-  stateMap: Map<number, DefaultSchedulingContextState> = new Map();
-
-  constructor(readonly logger: Logger) {}
-
-  async runAnalysis(
-    siteAnalysisId: number,
-    siteDetail: SiteDetail,
-    sessionEntry: SessionEntry
-  ): Promise<void> {
-    const { site, siteIndex, url } = siteDetail;
-    const { name: sessionName, controller: sessionController } = sessionEntry;
-
-    const state = getOrCreateMapValue(this.stateMap, siteAnalysisId, () => ({
-      siteLogger: this.logger.createSiteLogger(site, siteIndex),
-      failure: false,
-    }));
-    const { siteLogger, failure } = state;
-
-    if (failure) return;
-
-    const logResult = (name: string, result: AnalysisResult) => {
-      siteLogger.addLogfile(name, JSON.stringify(result));
-    };
-
-    console.log(
-      `run analysis ${siteIndex}: ${site} [${sessionName}] (${Date()})`
-    );
-
-    const runAnalysis = async (runId: string) => {
-      const name = `${sessionName}${runId}`;
-      const result = await sessionController.runAnalysis(url);
-      if (result.status === "success") {
-        logResult(name, result);
-      } else {
-        throw new Error(`failure ${name}`);
-      }
-    };
-
-    try {
-      await runAnalysis("A");
-      await runAnalysis("B");
-    } catch (e) {
-      state.failure = true;
-      console.log(e);
-    }
-  }
-
-  async endSiteAnalysis(
-    siteAnalysisId: number,
-    siteDetail: SiteDetail
-  ): Promise<void> {
-    const { site, siteIndex, url } = siteDetail;
-
-    const { siteLogger, failure } = this.stateMap.get(siteAnalysisId)!;
-
-    if (failure) {
-      siteLogger.failure(
-        (await isWebsiteAvailable(url)) ? "AnalysisError" : "NavigationError"
-      );
-    }
-    await siteLogger.persist();
-
-    this.stateMap.delete(siteAnalysisId);
-
-    console.log(`end analysis ${siteIndex}: ${site}`);
-  }
-}
