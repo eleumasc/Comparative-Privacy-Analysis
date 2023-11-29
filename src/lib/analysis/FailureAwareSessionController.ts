@@ -1,15 +1,15 @@
 import assert from "assert";
 import model from "../model";
-import { Session } from "./Session";
+import { SessionController } from "./Session";
 
-export interface FailureAwareSessionOptions {
+export interface FailureAwareSessionControllerOptions {
   maxAttempts: number;
 }
 
-export class FailureAwareSession implements Session {
+export class FailureAwareSessionController implements SessionController {
   constructor(
-    readonly session: Session,
-    readonly options: FailureAwareSessionOptions
+    readonly controller: SessionController,
+    readonly options: FailureAwareSessionControllerOptions
   ) {
     assert(options.maxAttempts > 0);
   }
@@ -18,7 +18,7 @@ export class FailureAwareSession implements Session {
     let lastResult: model.AnalysisResult;
     const maxAttempts = this.options.maxAttempts;
     for (let i = 0; i < maxAttempts; i += 1) {
-      lastResult = await this.session.runAnalysis(url);
+      lastResult = await this.controller.runAnalysis(url);
       if (lastResult.status === "success") {
         return lastResult;
       }
@@ -27,6 +27,6 @@ export class FailureAwareSession implements Session {
   }
 
   async terminate(force?: boolean): Promise<void> {
-    await this.session.terminate(force);
+    await this.controller.terminate(force);
   }
 }

@@ -5,7 +5,9 @@ export interface Session {
   terminate(force?: boolean): Promise<void>;
 }
 
+export interface SessionController extends Session {}
+
 interface SessionEntry {
   name: string;
-  session: Session;
+  controller: SessionController;
 }

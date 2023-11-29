@@ -1,3 +1,4 @@
+import { writeFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 
@@ -9,6 +10,7 @@ interface Logfile {
 interface SitesEntry {
   site: string;
   failureError: string | null;
+  siteIndex: number;
 }
 
 export class Logger {
@@ -16,8 +18,8 @@ export class Logger {
 
   constructor(readonly outputBasePath: string) {}
 
-  createSiteLogger(site: string): SiteLogger {
-    return new SiteLogger(this, site);
+  createSiteLogger(site: string, siteIndex: number): SiteLogger {
+    return new SiteLogger(this, site, siteIndex);
   }
 
   async updateSites(newEntry: SitesEntry): Promise<void> {
@@ -28,7 +30,7 @@ export class Logger {
       newEntry,
     ]);
 
-    await writeFile(filePath, JSON.stringify(updatedEntries));
+    writeFileSync(filePath, JSON.stringify(updatedEntries));
   }
 }
 
@@ -36,13 +38,17 @@ export class SiteLogger {
   private logfiles: Logfile[] = [];
   private failureError: string | null = null;
 
-  constructor(readonly logger: Logger, readonly site: string) {}
+  constructor(
+    readonly logger: Logger,
+    readonly site: string,
+    readonly siteIndex: number
+  ) {}
 
   addLogfile(name: string, payload: string): void {
     this.logfiles = [...this.logfiles, { name, payload }];
   }
 
-  reject(failureError: string): void {
+  failure(failureError: string): void {
     this.failureError = failureError;
   }
 
@@ -61,9 +67,11 @@ export class SiteLogger {
       }
     }
 
-    await logger.updateSites(<SitesEntry>{
+    const sitesEntry: SitesEntry = {
       site: this.site,
+      siteIndex: this.siteIndex,
       failureError: this.failureError,
-    });
+    };
+    await logger.updateSites(sitesEntry);
   }
 }

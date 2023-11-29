@@ -1,15 +1,19 @@
 import assert from "assert";
-import { Session } from "./Session";
+import { Session, SessionController } from "./Session";
 import model from "../model";
 import { timeBomb } from "../util/async";
 
-export class FaultAwareSession implements Session {
+export class DefaultSessionController implements SessionController {
   private session: Session | null = null;
 
   constructor(
     readonly sessionFactory: () => Promise<Session>,
     readonly timeoutMs?: number
-  ) {}
+  ) {
+    if (typeof timeoutMs !== "undefined") {
+      assert(timeoutMs > 0);
+    }
+  }
 
   async runAnalysis(url: string): Promise<model.AnalysisResult> {
     const tryOnce = async () => {
@@ -20,7 +24,6 @@ export class FaultAwareSession implements Session {
         if (typeof timeoutMs === "undefined") {
           return await currentSession.runAnalysis(url);
         } else {
-          assert(timeoutMs > 0);
           return await timeBomb(currentSession.runAnalysis(url), timeoutMs);
         }
       } catch (e) {
