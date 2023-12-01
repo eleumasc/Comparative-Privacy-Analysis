@@ -21,7 +21,7 @@ export class ChromiumSession implements Session {
   async runAnalysis(url: string): Promise<model.AnalysisResult> {
     const browser = this.browser;
 
-    const process = async (page: Page): Promise<model.Detail> => {
+    const process = async (page: Page): Promise<model.AnalysisDetail> => {
       let requests: model.Request[] = [];
       page.on("request", (interceptedRequest) => {
         const processBody = (): RequestBody | null => {
@@ -138,7 +138,6 @@ const setAggressiveShields = async (browser: Browser) => {
   await page.evaluate(`
 chrome.send("setAdControlType", [true]);
 chrome.send("setCosmeticFilteringControlType", ["block"]);
-chrome.send("setFingerprintingControlType", ["block"]);
 `);
   await page.close();
 };

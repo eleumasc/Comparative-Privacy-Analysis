@@ -1,10 +1,17 @@
+export interface SitesEntry {
+  site: string;
+  failureError: string | null;
+  siteIndex: number;
+  startTime: number;
+}
+
 export interface BaseAnalysisResult {
   status: string;
 }
 
 export interface SuccessfulAnalysisResult extends BaseAnalysisResult {
   status: "success";
-  detail: Detail;
+  detail: AnalysisDetail;
 }
 
 export interface FailedAnalysisResult extends BaseAnalysisResult {
@@ -14,7 +21,7 @@ export interface FailedAnalysisResult extends BaseAnalysisResult {
 
 export type AnalysisResult = SuccessfulAnalysisResult | FailedAnalysisResult;
 
-export interface Detail {
+export interface AnalysisDetail {
   requests: Request[];
   blockedRequests?: BlockedRequest[];
   frames: Frame[];

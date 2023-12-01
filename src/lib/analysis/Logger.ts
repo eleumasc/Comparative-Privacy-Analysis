@@ -1,17 +1,11 @@
 import { writeFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { SitesEntry } from "../model";
 
 interface Logfile {
   name: string;
   payload: string;
-}
-
-interface SitesEntry {
-  site: string;
-  failureError: string | null;
-  siteIndex: number;
-  startTime: number;
 }
 
 export class Logger {

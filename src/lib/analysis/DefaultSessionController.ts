@@ -1,7 +1,7 @@
 import assert from "assert";
 import { Session, SessionController } from "./Session";
 import model from "../model";
-import { timeBomb } from "../util/async";
+import { asyncDelay, timeBomb } from "../util/async";
 
 export class DefaultSessionController implements SessionController {
   private session: Session | null = null;
@@ -29,7 +29,7 @@ export class DefaultSessionController implements SessionController {
           return await timeBomb(currentSession.runAnalysis(url), timeoutMs);
         }
       } catch (e) {
-        this.terminate(true);
+        await this.terminate(true);
         throw e;
       }
     };
@@ -46,6 +46,7 @@ export class DefaultSessionController implements SessionController {
     this.session = null;
     if (session) {
       await session.terminate(force);
+      await asyncDelay(1_000);
     }
   }
 }

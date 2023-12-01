@@ -5,6 +5,6 @@ export const getSiteFromHostname = (hostname: string): string => {
   if (site !== null) {
     return site;
   } else {
-    throw new Error(`Invalid hostname: ${hostname}`);
+    return hostname;
   }
 };

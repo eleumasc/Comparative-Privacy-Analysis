@@ -3,17 +3,13 @@ import { distinct } from "../util/array";
 import { findLCSubstring } from "../util/findLCSubstring";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 
-export interface ClassifyResult {
-  flow: Flow;
-  cookieMatchingEffective: boolean;
-}
-
 export interface Flow {
   cookieKeys: string[];
   storageItemKeys: string[];
   sink: string;
   targetSite: string;
   sinkScriptUrl: string;
+  _readingDocumentCookie: boolean;
 }
 
 interface NetworkSink {
@@ -22,7 +18,7 @@ interface NetworkSink {
   scriptURL: URL;
 }
 
-const classifyNetworkSink = (
+const createNetworkSink = (
   taintReport: TaintReport,
   baseUrl: string
 ): NetworkSink => {
@@ -81,12 +77,9 @@ const findMatchingCookieKeys = (
     .map(({ key }) => key);
 };
 
-export const classifyFlow = (
-  taintReport: TaintReport,
-  frame: Frame
-): ClassifyResult => {
+export const createFlow = (taintReport: TaintReport, frame: Frame): Flow => {
   const { targetURL: sinkTargetURL, scriptURL: sinkScriptURL } =
-    classifyNetworkSink(taintReport, frame.baseUrl);
+    createNetworkSink(taintReport, frame.baseUrl);
 
   const { str, sink, taint } = taintReport;
 
@@ -105,25 +98,23 @@ export const classifyFlow = (
     })
   );
 
+  const storageItemSources = taint.filter((taintFlow) => {
+    const { operation: opType } = taintFlow.operation;
+    return opType === "localStorage.getItem";
+  });
   const storageItemKeys = distinct(
-    taint
-      .filter((taintFlow) => {
-        const { operation: opType } = taintFlow.operation;
-        return opType === "localStorage.getItem";
-      })
-      .map((taintFlow): string => taintFlow.operation.arguments[0])
+    storageItemSources.map(
+      (taintFlow): string => taintFlow.operation.arguments[0]
+    )
   );
 
   return {
-    flow: {
-      cookieKeys,
-      storageItemKeys,
-      sink,
-      targetSite: getSiteFromHostname(sinkTargetURL.hostname),
-      sinkScriptUrl: sinkScriptURL.origin + sinkScriptURL.pathname,
-    },
-    cookieMatchingEffective:
-      cookieKeys.length > 0 || cookieSources.length === 0,
+    cookieKeys,
+    storageItemKeys,
+    sink,
+    targetSite: getSiteFromHostname(sinkTargetURL.hostname),
+    sinkScriptUrl: sinkScriptURL.origin + sinkScriptURL.pathname,
+    _readingDocumentCookie: cookieSources.length > 0,
   };
 };
 
@@ -139,6 +130,7 @@ export const equalsFlow = (x: Flow, y: Flow): boolean => {
     x.storageItemKeys.every((xKey) => y.storageItemKeys.includes(xKey)) &&
     x.sink === y.sink &&
     x.targetSite === y.targetSite &&
-    x.sinkScriptUrl === y.sinkScriptUrl
+    x.sinkScriptUrl === y.sinkScriptUrl &&
+    x._readingDocumentCookie === y._readingDocumentCookie
   );
 };

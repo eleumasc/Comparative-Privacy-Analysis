@@ -1,8 +1,15 @@
 import { readFile } from "fs/promises";
-import { AnalysisResult, SuccessfulAnalysisResult } from "../model";
+import { AnalysisDetail, AnalysisResult } from "../model";
 import path from "path";
+import assert from "assert";
 
-export const BrowserId = ["foxhound", "firefox", "brave"] as const;
+export const BrowserId = [
+  "foxhound",
+  "firefox",
+  "firefox-nops",
+  "brave",
+  "brave-aggr",
+] as const;
 
 export type BrowserId = (typeof BrowserId)[number];
 
@@ -10,32 +17,32 @@ export const RunId = ["A", "B"] as const;
 
 export type RunId = (typeof RunId)[number];
 
-export interface AnalysisResultLabel {
+export interface AnalysisLabel {
   browserId: BrowserId;
   index: number;
   runId: RunId;
 }
 
-export type AnalysisResultQuery = Partial<AnalysisResultLabel>;
+export type AnalysisDataQuery = Partial<AnalysisLabel>;
 
-interface SiteAnalysisResultEntry {
-  label: AnalysisResultLabel;
-  result: AnalysisResult;
+interface SiteAnalysisDataEntry {
+  label: AnalysisLabel;
+  detail: AnalysisDetail;
 }
 
-export class SiteAnalysisResult {
+export class SiteAnalysisData {
   constructor(
     readonly site: string,
-    readonly entries: SiteAnalysisResultEntry[]
+    readonly entries: SiteAnalysisDataEntry[]
   ) {}
 
-  all(): AnalysisResult[] {
-    return this.entries.map(({ result }) => result);
+  all(): AnalysisDetail[] {
+    return this.entries.map(({ detail }) => detail);
   }
 
-  select(query: AnalysisResultQuery): AnalysisResult[] {
+  select(query: AnalysisDataQuery): AnalysisDetail[] {
     return this.entries
-      .filter(({ label }) => {
+      .filter(({ label: label }) => {
         return (
           (typeof query.browserId === "undefined" ||
             query.browserId === label.browserId) &&
@@ -43,14 +50,7 @@ export class SiteAnalysisResult {
           (typeof query.runId === "undefined" || query.runId === label.runId)
         );
       })
-      .map(({ result }) => result);
-  }
-
-  selectSuccess(query: AnalysisResultQuery): SuccessfulAnalysisResult[] {
-    return this.select(query).filter(
-      (result): result is SuccessfulAnalysisResult =>
-        result.status === "success"
-    );
+      .map(({ detail }) => detail);
   }
 
   static async fromFile(outputPath: string, site: string) {
@@ -60,8 +60,12 @@ export class SiteAnalysisResult {
           return "tf";
         case "firefox":
           return "ff";
+        case "firefox-nops":
+          return "fx";
         case "brave":
           return "br";
+        case "brave-aggr":
+          return "bx";
       }
     };
 
@@ -69,17 +73,18 @@ export class SiteAnalysisResult {
       browserId: BrowserId,
       index: number,
       runId: RunId
-    ): Promise<SiteAnalysisResultEntry> => {
+    ): Promise<SiteAnalysisDataEntry> => {
       const suffix = `${browserSuffixPart(browserId)}${index}${runId}`;
       const result = JSON.parse(
         (
           await readFile(path.join(outputPath, `${site}+${suffix}.json`))
         ).toString()
       ) as AnalysisResult;
-      return { label: { browserId, index, runId }, result };
+      assert(result.status === "success");
+      return { label: { browserId, index, runId }, detail: result.detail };
     };
 
-    return new SiteAnalysisResult(
+    return new SiteAnalysisData(
       site,
       await Promise.all([
         entry("foxhound", 1, "A"),
@@ -96,6 +101,16 @@ export class SiteAnalysisResult {
         entry("firefox", 4, "B"),
         entry("firefox", 5, "A"),
         entry("firefox", 5, "B"),
+        entry("firefox-nops", 1, "A"),
+        entry("firefox-nops", 1, "B"),
+        entry("firefox-nops", 2, "A"),
+        entry("firefox-nops", 2, "B"),
+        entry("firefox-nops", 3, "A"),
+        entry("firefox-nops", 3, "B"),
+        entry("firefox-nops", 4, "A"),
+        entry("firefox-nops", 4, "B"),
+        entry("firefox-nops", 5, "A"),
+        entry("firefox-nops", 5, "B"),
         entry("brave", 1, "A"),
         entry("brave", 1, "B"),
         entry("brave", 2, "A"),
@@ -106,6 +121,16 @@ export class SiteAnalysisResult {
         entry("brave", 4, "B"),
         entry("brave", 5, "A"),
         entry("brave", 5, "B"),
+        entry("brave-aggr", 1, "A"),
+        entry("brave-aggr", 1, "B"),
+        entry("brave-aggr", 2, "A"),
+        entry("brave-aggr", 2, "B"),
+        entry("brave-aggr", 3, "A"),
+        entry("brave-aggr", 3, "B"),
+        entry("brave-aggr", 4, "A"),
+        entry("brave-aggr", 4, "B"),
+        entry("brave-aggr", 5, "A"),
+        entry("brave-aggr", 5, "B"),
       ])
     );
   }
