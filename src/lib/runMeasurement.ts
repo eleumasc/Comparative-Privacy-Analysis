@@ -1,7 +1,7 @@
 import assert from "assert";
 import { Config } from "./Config";
 import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
-import { Flow, createFlow, equalsFlow, isTainted } from "./measurement/Flow";
+import { Flow, createFlow, equalsFlow } from "./measurement/Flow";
 import { BrowserId, SiteAnalysisData } from "./measurement/SiteAnalysisResult";
 import { Frame, KeyValuePair, Request, SitesEntry, TaintReport } from "./model";
 import { distinct, mapSequentialAsync } from "./util/array";
@@ -30,17 +30,52 @@ interface SiteReport {
   ssTrkFlows: number;
   cdssTrkFlows: number;
   trackers: string[];
+  trackerDomains: number;
   ssTrackers: string[];
   cdssTrackers: string[];
+}
+
+interface AggregateReport {
+  cookies: number;
+  cookieDomains: number;
+  trkCookies: number;
+  trkCookieDomains: number;
+  trkCookieFlows: number;
+  trkCookieFlowDomains: number;
+  cookieAssignmentLabeledFlows: number;
+
+  storageItems: number;
+  storageItemDomains: number;
+  trkStorageItems: number;
+  trkStorageItemDomain: number;
+  trkStorageItemFlows: number;
+  trkStorageItemFlowDomains: number;
+
+  trkFlows: number;
+  trkFlowDomains: number;
+  ssTrkFlows: number;
+  cdssTrkFlows: number;
+  trackers: number;
+  trackerDomains: number;
+  ssTrackers: string[];
+  cdssTrackers: string[];
+  trackerRanking: TrackerRankingEntry[];
+}
+
+interface TrackerRankingEntry {
+  tracker: string;
+  popularity: number;
 }
 
 export const runMeasurement = async (config: Config) => {
   const outputPath = process.argv[2];
   assert(typeof outputPath === "string");
 
-  const sitesEntries = JSON.parse(
-    (await readFile(path.join(outputPath, "sites.json"))).toString()
-  ) as SitesEntry[];
+  const sitesEntries = (
+    JSON.parse(
+      (await readFile(path.join(outputPath, "sites.json"))).toString()
+    ) as SitesEntry[]
+  ).slice(0, 50); // TODO: remove slicing
 
   const totalCount = sitesEntries.length;
   const successSitesEntries = sitesEntries.filter(
@@ -58,7 +93,7 @@ export const runMeasurement = async (config: Config) => {
 
   const siteReports = (
     await mapSequentialAsync(
-      successSitesEntries.slice(0, 250), // TODO: remove slicing
+      successSitesEntries,
       async (siteEntry, siteIndex) => {
         const { site } = siteEntry;
         try {
@@ -142,7 +177,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
       }
     });
   };
-  const actualSite = tf1AFrame.url;
+  const actualSite = getSiteFromHostname(new URL(tf1AFrame.url).hostname);
   const flows = distinct(
     [
       ...createFlows(tf1AFrame.taintReports!, tf1AFrame),
@@ -230,9 +265,9 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
   //   );
   //   const matchedTrackingFlows = trkFlows.filter(
   //     (flow) =>
-  //       flow.cookieKeys.some((key) => cookieKeys.includes(key)) ||
-  //       flow.storageItemKeys.some((key) => storageItemKeys.includes(key)) ||
-  //       targetSites.includes(flow.targetSite) ||
+  //       flow.cookieKeys.some((key) => cookieKeys.includes(key)) &&
+  //       flow.storageItemKeys.some((key) => storageItemKeys.includes(key)) &&
+  //       targetSites.includes(flow.targetSite) &&
   //       includedScripts.includes(flow.sinkScriptUrl)
   //   );
   //   return {
@@ -270,6 +305,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     ssTrkFlows: ssTrkFlows.length, // 3.C
     cdssTrkFlows: cdssTrkFlows.length, // 3.C
     trackers, // 3.D, 3.F
+    trackerDomains: trackers.length > 0 ? 1 : 0, // 3.D
     ssTrackers, // 3.E
     cdssTrackers, // 3.E
 
@@ -280,4 +316,92 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
   };
 };
 
-const aggregate = (siteReports: SiteReport[]) => {};
+const aggregate = (siteReports: SiteReport[]): AggregateReport => {
+  const trackers = distinct(
+    siteReports.flatMap((siteReport) => siteReport.trackers)
+  );
+  const ssTrackers = distinct(
+    siteReports.flatMap((siteReport) => siteReport.ssTrackers)
+  );
+  const cdssTrackers = distinct(
+    siteReports.flatMap((siteReport) => siteReport.cdssTrackers)
+  );
+  const trackerRanking = rankTrackers(siteReports);
+
+  return siteReports.reduce<AggregateReport>(
+    (acc, cur) => {
+      return {
+        cookies: acc.cookies + cur.cookies,
+        cookieDomains: acc.cookieDomains + cur.cookieDomains,
+        trkCookies: acc.trkCookies + cur.trkCookies,
+        trkCookieDomains: acc.trkCookieDomains + cur.trkCookieDomains,
+        trkCookieFlows: acc.trkCookieFlows + cur.trkCookieFlows,
+        trkCookieFlowDomains:
+          acc.trkCookieFlowDomains + cur.trkCookieFlowDomains,
+        cookieAssignmentLabeledFlows:
+          acc.cookieAssignmentLabeledFlows + cur.cookieAssignmentLabeledFlows,
+
+        storageItems: acc.storageItems + cur.storageItems,
+        storageItemDomains: acc.storageItemDomains + cur.storageItemDomains,
+        trkStorageItems: acc.trkStorageItems + cur.trkStorageItems,
+        trkStorageItemDomain:
+          acc.trkStorageItemDomain + cur.trkStorageItemDomain,
+        trkStorageItemFlows: acc.trkStorageItemFlows + cur.trkStorageItemFlows,
+        trkStorageItemFlowDomains:
+          acc.trkStorageItemFlowDomains + cur.trkStorageItemFlowDomains,
+
+        trkFlows: acc.trkFlows + cur.trkFlows,
+        trkFlowDomains: acc.trkFlowDomains + cur.trkFlowDomains,
+        ssTrkFlows: acc.ssTrkFlows + cur.ssTrkFlows,
+        cdssTrkFlows: acc.cdssTrkFlows + cur.cdssTrkFlows,
+        trackers: trackers.length,
+        trackerDomains: acc.trackerDomains + cur.trackerDomains,
+        ssTrackers: ssTrackers,
+        cdssTrackers: cdssTrackers,
+        trackerRanking,
+      };
+    },
+    {
+      cookies: 0,
+      cookieDomains: 0,
+      trkCookies: 0,
+      trkCookieDomains: 0,
+      trkCookieFlows: 0,
+      trkCookieFlowDomains: 0,
+      cookieAssignmentLabeledFlows: 0,
+
+      storageItems: 0,
+      storageItemDomains: 0,
+      trkStorageItems: 0,
+      trkStorageItemDomain: 0,
+      trkStorageItemFlows: 0,
+      trkStorageItemFlowDomains: 0,
+
+      trkFlows: 0,
+      trkFlowDomains: 0,
+      ssTrkFlows: 0,
+      cdssTrkFlows: 0,
+      trackers: 0,
+      trackerDomains: 0,
+      ssTrackers: [],
+      cdssTrackers: [],
+      trackerRanking: [],
+    }
+  );
+};
+
+const rankTrackers = (siteReports: SiteReport[]): TrackerRankingEntry[] => {
+  const popularityMap = siteReports.reduce((map, siteReport) => {
+    for (const tracker of siteReport.trackers) {
+      const currentPopularity = map.get(tracker) ?? 0;
+      map.set(tracker, currentPopularity + 1);
+    }
+    return map;
+  }, new Map<string, number>());
+
+  return [...popularityMap.entries()]
+    .map(
+      ([tracker, popularity]): TrackerRankingEntry => ({ tracker, popularity })
+    )
+    .sort((a, b) => -(a.popularity - b.popularity));
+};
