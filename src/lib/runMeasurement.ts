@@ -27,12 +27,12 @@ interface SiteReport {
 
   trkFlows: number;
   trkFlowDomains: number;
-  ssTrkFlows: number;
-  cdssTrkFlows: number;
+  intnSameSiteTrkFlows: number;
+  xdomSameSiteTrkFlows: number;
   trackers: string[];
   trackerDomains: number;
-  ssTrackers: string[];
-  cdssTrackers: string[];
+  intnSameSiteTrackers: string[];
+  xdomSameSiteTrackers: string[];
 }
 
 interface AggregateReport {
@@ -53,12 +53,12 @@ interface AggregateReport {
 
   trkFlows: number;
   trkFlowDomains: number;
-  ssTrkFlows: number;
-  cdssTrkFlows: number;
+  intnSameSiteTrkFlows: number;
+  xdomSameSiteTrkFlows: number;
   trackers: number;
   trackerDomains: number;
-  ssTrackers: string[];
-  cdssTrackers: string[];
+  intnSameSiteTrackers: string[];
+  xdomSameSiteTrackers: string[];
   trackerRanking: TrackerRankingEntry[];
 }
 
@@ -222,17 +222,21 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     ...selectAllowedTargetSites(tf1A.requests, tf1AFrame.frameId),
     ...selectAllowedTargetSites(tf1B.requests, tf1BFrame.frameId),
   ]);
-  const ssTrkFlows = trkFlows.filter((flow) =>
+  const intnSameSiteTrkFlows = trkFlows.filter((flow) =>
     allowedTargetSites.includes(flow.targetSite)
   );
-  const cdssTrkFlows = trkFlows.filter(
+  const xdomSameSiteTrkFlows = trkFlows.filter(
     (flow) => !allowedTargetSites.includes(flow.targetSite)
   );
 
   const trackers = distinct(trkFlows.map((flow) => flow.targetSite));
 
-  const ssTrackers = distinct(ssTrkFlows.map((flow) => flow.targetSite));
-  const cdssTrackers = distinct(cdssTrkFlows.map((flow) => flow.targetSite));
+  const intnSameSiteTrackers = distinct(
+    intnSameSiteTrkFlows.map((flow) => flow.targetSite)
+  );
+  const xdomSameSiteTrackers = distinct(
+    xdomSameSiteTrkFlows.map((flow) => flow.targetSite)
+  );
 
   // const compareBrowser = (browserId: BrowserId) => {
   //   const details = data.select({ browserId });
@@ -302,12 +306,12 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
 
     trkFlows: trkFlows.length, // 3.A
     trkFlowDomains: trkFlows.length > 0 ? 1 : 0, // 3.B
-    ssTrkFlows: ssTrkFlows.length, // 3.C
-    cdssTrkFlows: cdssTrkFlows.length, // 3.C
+    intnSameSiteTrkFlows: intnSameSiteTrkFlows.length, // 3.C
+    xdomSameSiteTrkFlows: xdomSameSiteTrkFlows.length, // 3.C
     trackers, // 3.D, 3.F
     trackerDomains: trackers.length > 0 ? 1 : 0, // 3.D
-    ssTrackers, // 3.E
-    cdssTrackers, // 3.E
+    intnSameSiteTrackers, // 3.E
+    xdomSameSiteTrackers, // 3.E
 
     // ffMatchedTrackingFlows: ffResult.matchedTrackingFlows.length,
     // fxMatchedTrackingFlows: fxResult.matchedTrackingFlows.length,
@@ -320,11 +324,11 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
   const trackers = distinct(
     siteReports.flatMap((siteReport) => siteReport.trackers)
   );
-  const ssTrackers = distinct(
-    siteReports.flatMap((siteReport) => siteReport.ssTrackers)
+  const intnSameSiteTrackers = distinct(
+    siteReports.flatMap((siteReport) => siteReport.intnSameSiteTrackers)
   );
-  const cdssTrackers = distinct(
-    siteReports.flatMap((siteReport) => siteReport.cdssTrackers)
+  const xdomSameSiteTrackers = distinct(
+    siteReports.flatMap((siteReport) => siteReport.xdomSameSiteTrackers)
   );
   const trackerRanking = rankTrackers(siteReports);
 
@@ -352,12 +356,14 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
 
         trkFlows: acc.trkFlows + cur.trkFlows,
         trkFlowDomains: acc.trkFlowDomains + cur.trkFlowDomains,
-        ssTrkFlows: acc.ssTrkFlows + cur.ssTrkFlows,
-        cdssTrkFlows: acc.cdssTrkFlows + cur.cdssTrkFlows,
+        intnSameSiteTrkFlows:
+          acc.intnSameSiteTrkFlows + cur.intnSameSiteTrkFlows,
+        xdomSameSiteTrkFlows:
+          acc.xdomSameSiteTrkFlows + cur.xdomSameSiteTrkFlows,
         trackers: trackers.length,
         trackerDomains: acc.trackerDomains + cur.trackerDomains,
-        ssTrackers: ssTrackers,
-        cdssTrackers: cdssTrackers,
+        intnSameSiteTrackers: intnSameSiteTrackers,
+        xdomSameSiteTrackers: xdomSameSiteTrackers,
         trackerRanking,
       };
     },
@@ -379,12 +385,12 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
 
       trkFlows: 0,
       trkFlowDomains: 0,
-      ssTrkFlows: 0,
-      cdssTrkFlows: 0,
+      intnSameSiteTrkFlows: 0,
+      xdomSameSiteTrkFlows: 0,
       trackers: 0,
       trackerDomains: 0,
-      ssTrackers: [],
-      cdssTrackers: [],
+      intnSameSiteTrackers: [],
+      xdomSameSiteTrackers: [],
       trackerRanking: [],
     }
   );
