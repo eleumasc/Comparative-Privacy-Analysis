@@ -9,20 +9,21 @@ interface DefaultRunnerContextState {
   siteLogger: SiteLogger;
   failure: boolean;
 }
+
 export class DefaultRunnerContext implements RunnerContext {
   stateMap: Map<number, DefaultRunnerContextState> = new Map();
 
   constructor(readonly logger: Logger) {}
 
   async runAnalysis(
-    siteAnalysisId: number,
+    siteId: number,
     siteEntry: SiteEntry,
     sessionEntry: SessionEntry
   ): Promise<void> {
     const { site, siteIndex, url } = siteEntry;
     const { name: sessionName, controller: sessionController } = sessionEntry;
 
-    const state = getOrCreateMapValue(this.stateMap, siteAnalysisId, () => ({
+    const state = getOrCreateMapValue(this.stateMap, siteId, () => ({
       siteLogger: this.logger.createSiteLogger(site, siteIndex),
       failure: false,
     }));
@@ -59,13 +60,10 @@ export class DefaultRunnerContext implements RunnerContext {
     console.log(`end analysis ${siteIndex}: ${site} [${sessionName}]`);
   }
 
-  async endSiteAnalysis(
-    siteAnalysisId: number,
-    siteEntry: SiteEntry
-  ): Promise<void> {
+  async endSiteAnalysis(siteId: number, siteEntry: SiteEntry): Promise<void> {
     const { site, siteIndex, url } = siteEntry;
 
-    const { siteLogger, failure } = this.stateMap.get(siteAnalysisId)!;
+    const { siteLogger, failure } = this.stateMap.get(siteId)!;
 
     if (failure) {
       siteLogger.failure(
@@ -74,7 +72,7 @@ export class DefaultRunnerContext implements RunnerContext {
     }
     await siteLogger.persist();
 
-    this.stateMap.delete(siteAnalysisId);
+    this.stateMap.delete(siteId);
 
     console.log(`*** DONE ${siteIndex}: ${site}`);
   }

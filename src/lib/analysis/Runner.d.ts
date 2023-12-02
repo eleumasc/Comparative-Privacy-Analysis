@@ -14,9 +14,9 @@ export interface SiteEntry {
 
 export interface RunnerContext {
   runAnalysis(
-    siteAnalysisId: number,
-    siteDetail: SiteEntry,
+    siteId: number,
+    siteEntry: SiteEntry,
     sessionEntry: SessionEntry
   ): Promise<void>;
-  endSiteAnalysis(siteAnalysisId: number, siteDetail: SiteEntry): Promise<void>;
+  endSiteAnalysis(siteId: number, siteEntry: SiteEntry): Promise<void>;
 }

@@ -11,16 +11,15 @@ export interface DefaultRunnerOptions {
   batchSize: number;
 }
 
-interface SiteAnalysis {
-  id: number;
+interface SiteStatus {
+  siteId: number;
   siteEntry: SiteEntry;
-  notify: () => void;
-  isCompleted: Promise<void>;
+  completionCount: number;
 }
 
-interface Batch {
-  siteAnalyses: SiteAnalysis[];
+interface SessionStatus {
   sessionEntry: SessionEntry;
+  nextBatchIndex: number;
 }
 
 export class DefaultRunner implements Runner {
@@ -39,106 +38,96 @@ export class DefaultRunner implements Runner {
   ): Promise<void> {
     const { concurrencyLevel, coincidenceLevel, batchSize } = this.options;
 
-    const generateBatches = function* (
-      siteAnalyses: SiteAnalysis[],
-      sessionEntries: SessionEntry[]
-    ): Generator<Batch, void> {
-      for (const batchSiteAnalyses of divide(siteAnalyses, batchSize)) {
-        for (const sessionEntry of sessionEntries) {
-          yield { siteAnalyses: batchSiteAnalyses, sessionEntry };
+    const batches = divide(
+      siteEntries.map(
+        (siteEntry): SiteStatus => ({
+          siteId: siteEntry.siteIndex,
+          siteEntry,
+          completionCount: 0,
+        })
+      ),
+      batchSize
+    );
+    const totalBatches = batches.length;
+    const sessionStatuses = sessionEntries.map(
+      (sessionEntry): SessionStatus => ({
+        sessionEntry,
+        nextBatchIndex: 0,
+      })
+    );
+    const totalSessions = sessionEntries.length;
+    const effectiveConcurrencyLevel = Math.min(concurrencyLevel, totalSessions);
+
+    const processBatch = async (
+      batch: SiteStatus[],
+      sessionEntry: SessionEntry
+    ) => {
+      for (const siteStatus of batch) {
+        const { siteId, siteEntry } = siteStatus;
+
+        await context.runAnalysis(siteId, siteEntry, sessionEntry);
+
+        siteStatus.completionCount += 1;
+        if (siteStatus.completionCount === totalSessions) {
+          await context.endSiteAnalysis(siteId, siteEntry);
         }
       }
     };
 
-    const sessionLockRefs = new Map<string, { lock: Promise<void> | null }>();
-    const processNextBatch = async (): Promise<boolean> => {
-      const { done: noMoreBatches, value: batch } = batchesGenerator.next();
-      if (noMoreBatches) {
-        return false;
+    let lastUsedSessionEntries: SessionEntry[] = [];
+    for (
+      let aliveSessionStatuses: SessionStatus[];
+      (aliveSessionStatuses = sessionStatuses.filter(
+        (sessionStatus) => sessionStatus.nextBatchIndex < totalBatches
+      )).length > 0;
+
+    ) {
+      aliveSessionStatuses.sort((a, b) => a.nextBatchIndex - b.nextBatchIndex);
+
+      let runningProcesses: Promise<void>[] = [];
+      let usedSessionEntries: SessionEntry[] = [];
+      const batchCoincidenceMap = new Map<number, number>();
+      for (
+        let i = 0;
+        i < Math.min(effectiveConcurrencyLevel, aliveSessionStatuses.length);
+        i += 1
+      ) {
+        const sessionStatus = aliveSessionStatuses[i];
+        const { sessionEntry, nextBatchIndex } = sessionStatus;
+
+        const batchCoincidence = batchCoincidenceMap.get(nextBatchIndex) ?? 0;
+        if (batchCoincidence === coincidenceLevel) {
+          continue;
+        }
+        batchCoincidenceMap.set(nextBatchIndex, batchCoincidence + 1);
+
+        const batch = batches[nextBatchIndex];
+        sessionStatus.nextBatchIndex += 1;
+        runningProcesses = [
+          ...runningProcesses,
+          processBatch(batch, sessionEntry),
+        ];
+        usedSessionEntries = [
+          ...usedSessionEntries,
+          sessionStatus.sessionEntry,
+        ];
       }
 
-      const { siteAnalyses, sessionEntry } = batch;
-
-      const sessionLockRef = getOrCreateMapValue(
-        sessionLockRefs,
-        sessionEntry.name,
-        () => ({ lock: null })
+      await Promise.all(
+        lastUsedSessionEntries
+          .filter(
+            (sessionStatus) => !usedSessionEntries.includes(sessionStatus)
+          )
+          .map((sessionEntry) => sessionEntry.controller.terminate())
       );
-      while (sessionLockRef.lock !== null) {
-        await sessionLockRef.lock;
-      }
-      const lockCompleter = new Completer<void>();
-      sessionLockRef.lock = lockCompleter.promise;
 
-      for (const siteAnalysis of siteAnalyses) {
-        await enqueueAnalysis(siteAnalysis, sessionEntry);
-      }
-      await sessionEntry.controller.terminate();
+      await Promise.all(runningProcesses);
 
-      sessionLockRef.lock = null;
-      lockCompleter.complete();
+      lastUsedSessionEntries = usedSessionEntries;
+    }
 
-      return true;
-    };
-
-    const siteAnalysisLockSets = new Map<number, Set<Promise<void>>>();
-    const enqueueAnalysis = async (
-      siteAnalysis: SiteAnalysis,
-      sessionEntry: SessionEntry
-    ): Promise<void> => {
-      const { id: siteAnalysisId, siteEntry } = siteAnalysis;
-
-      const siteAnalysisLockSet = getOrCreateMapValue(
-        siteAnalysisLockSets,
-        siteAnalysisId,
-        () => new Set()
-      );
-
-      const canCoincide = () => siteAnalysisLockSet.size < coincidenceLevel;
-      while (!canCoincide()) {
-        await Promise.race([...siteAnalysisLockSet]);
-      }
-
-      const lockCompleter = new Completer<void>();
-      const lock = lockCompleter.promise;
-      siteAnalysisLockSet.add(lock);
-
-      await context.runAnalysis(siteAnalysisId, siteEntry, sessionEntry);
-      siteAnalysis.notify();
-
-      siteAnalysisLockSet.delete(lock);
-      lockCompleter.complete();
-    };
-
-    const expectedNotifiedCount = sessionEntries.length;
-    const siteAnalyses = siteEntries.map(
-      (siteEntry, siteAnalysisId): SiteAnalysis => {
-        const completer = new Completer<void>();
-
-        let notNotifiedCount = expectedNotifiedCount;
-        const notify = async (): Promise<void> => {
-          notNotifiedCount -= 1;
-          if (notNotifiedCount === 0) {
-            await context.endSiteAnalysis(siteAnalysisId, siteEntry);
-            completer.complete();
-          }
-        };
-
-        return {
-          id: siteAnalysisId,
-          siteEntry,
-          notify,
-          isCompleted: completer.promise,
-        };
-      }
-    );
-    const batchesGenerator = generateBatches(siteAnalyses, sessionEntries);
-    const workers = Array.from({ length: concurrencyLevel }, async () => {
-      while (await processNextBatch());
-    });
-    await Promise.all(workers);
     await Promise.all(
-      siteAnalyses.map((siteAnalysis) => siteAnalysis.isCompleted)
+      sessionEntries.map((sessionEntry) => sessionEntry.controller.terminate())
     );
   }
 }
