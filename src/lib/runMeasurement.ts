@@ -1,7 +1,7 @@
 import assert from "assert";
 import { Config } from "./Config";
 import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
-import { Flow, createFlow, equalsFlow } from "./measurement/Flow";
+import { Flow, equalsFlow, getFlowsFromTaintReport } from "./measurement/Flow";
 import { BrowserId, SiteAnalysisData } from "./measurement/SiteAnalysisResult";
 import { Frame, KeyValuePair, Request, SitesEntry, TaintReport } from "./model";
 import { distinct, mapSequentialAsync } from "./util/array";
@@ -14,9 +14,10 @@ interface SiteReport {
   cookieDomains: number;
   trkCookies: number;
   trkCookieDomains: number;
+  cookieFlows: number;
+  labeledCookieFlows: number;
   trkCookieFlows: number;
   trkCookieFlowDomains: number;
-  cookieAssignmentLabeledFlows: number;
 
   storageItems: number;
   storageItemDomains: number;
@@ -40,9 +41,10 @@ interface AggregateReport {
   cookieDomains: number;
   trkCookies: number;
   trkCookieDomains: number;
+  cookieFlows: number;
+  labeledCookieFlows: number;
   trkCookieFlows: number;
   trkCookieFlowDomains: number;
-  cookieAssignmentLabeledFlows: number;
 
   storageItems: number;
   storageItemDomains: number;
@@ -168,55 +170,44 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     storageItems2A
   );
 
-  const createFlows = (taintReports: TaintReport[], frame: Frame): Flow[] => {
-    return taintReports.flatMap((taintReport) => {
-      try {
-        return [createFlow(taintReport, frame)];
-      } catch {
-        return [];
-      }
-    });
+  const getFlows = (taintReports: TaintReport[], frame: Frame): Flow[] => {
+    return taintReports.flatMap((taintReport) =>
+      getFlowsFromTaintReport(taintReport, frame)
+    );
   };
-  const actualSite = getSiteFromHostname(new URL(tf1AFrame.url).hostname);
+  const frameSite = getSiteFromHostname(new URL(tf1AFrame.url).hostname);
   const flows = distinct(
     [
-      ...createFlows(tf1AFrame.taintReports!, tf1AFrame),
-      ...createFlows(tf1BFrame.taintReports!, tf1BFrame),
+      ...getFlows(tf1AFrame.taintReports!, tf1AFrame),
+      ...getFlows(tf1BFrame.taintReports!, tf1BFrame),
     ],
     equalsFlow
-  ).filter((flow) => flow.targetSite !== actualSite); // consider just cross-site flows
+  ).filter((flow) => flow.targetSite !== frameSite); // consider just cross-site flows
 
-  const readingDocumentCookieFlows = flows.filter(
-    (flow) => flow._readingDocumentCookie
-  );
-  const taintCookieFlows = readingDocumentCookieFlows.filter(
-    (flow) => flow.cookieKeys.length > 0
-  ); // NOTE: taintCookieFlows.length / readingDocumentCookieFlows.length gives the "effectiveness" percentage of "cookie assignment" heuristics
-  const trkCookieFlows = taintCookieFlows.filter((flow) =>
-    flow.cookieKeys.some((key) => trkCookieKeys.includes(key))
+  const cookieFlows = flows.filter((flow) => flow.source === "cookie");
+  const labeledCookieFlows = cookieFlows.filter(
+    (flow) => flow.sourceKeys.length > 0
+  ); // NOTE: labeledCookieFlows.length / cookieFlows.length gives the "effectiveness" percentage of "cookie assignment" heuristics
+  const trkCookieFlows = labeledCookieFlows.filter((flow) =>
+    flow.sourceKeys.some((key) => trkCookieKeys.includes(key))
   );
 
   const trkStorageItemFlows = flows
-    .filter((flow) => flow.storageItemKeys.length > 0)
+    .filter((flow) => flow.source === "storageItem")
     .filter((flow) =>
-      flow.storageItemKeys.some((key) => trkStorageItemKeys.includes(key))
+      flow.sourceKeys.some((key) => trkStorageItemKeys.includes(key))
     );
 
-  const trkFlows = distinct(
-    [...trkCookieFlows, ...trkStorageItemFlows],
-    equalsFlow
-  );
+  const trkFlows = [...trkCookieFlows, ...trkStorageItemFlows];
 
   const selectAllowedTargetSites = (
     requests: Request[],
     frameId: string
   ): string[] => {
-    return distinct(
-      requests
-        .filter((request) => request.frameId === frameId)
-        .filter((request) => request.resourceType === "script")
-        .map((request) => getSiteFromHostname(new URL(request.url).hostname))
-    );
+    return requests
+      .filter((request) => request.frameId === frameId)
+      .filter((request) => request.resourceType === "script")
+      .map((request) => getSiteFromHostname(new URL(request.url).hostname));
   };
   const allowedTargetSites = distinct([
     ...selectAllowedTargetSites(tf1A.requests, tf1AFrame.frameId),
@@ -293,9 +284,10 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     cookieDomains: cookieKeys.length > 0 ? 1 : 0, // 1.A
     trkCookies: trkCookieKeys.length, // 1.B
     trkCookieDomains: trkCookieKeys.length > 0 ? 1 : 0, // 1.B
-    trkCookieFlows: trkCookieFlows.length, // 1.C
-    trkCookieFlowDomains: trkCookieFlows.length > 0 ? 1 : 0, // 1.C
-    cookieAssignmentLabeledFlows: taintCookieFlows.length, // 1.D
+    cookieFlows: cookieFlows.length, // 1.C
+    labeledCookieFlows: labeledCookieFlows.length, // 1.D
+    trkCookieFlows: trkCookieFlows.length, // 1.D
+    trkCookieFlowDomains: trkCookieFlows.length > 0 ? 1 : 0, // 1.D
 
     storageItems: storageItemKeys.length, // 2.A
     storageItemDomains: storageItemKeys.length > 0 ? 1 : 0, // 2.A
@@ -339,11 +331,11 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
         cookieDomains: acc.cookieDomains + cur.cookieDomains,
         trkCookies: acc.trkCookies + cur.trkCookies,
         trkCookieDomains: acc.trkCookieDomains + cur.trkCookieDomains,
+        cookieFlows: acc.cookieFlows + cur.cookieFlows,
+        labeledCookieFlows: acc.labeledCookieFlows + cur.labeledCookieFlows,
         trkCookieFlows: acc.trkCookieFlows + cur.trkCookieFlows,
         trkCookieFlowDomains:
           acc.trkCookieFlowDomains + cur.trkCookieFlowDomains,
-        cookieAssignmentLabeledFlows:
-          acc.cookieAssignmentLabeledFlows + cur.cookieAssignmentLabeledFlows,
 
         storageItems: acc.storageItems + cur.storageItems,
         storageItemDomains: acc.storageItemDomains + cur.storageItemDomains,
@@ -372,9 +364,10 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
       cookieDomains: 0,
       trkCookies: 0,
       trkCookieDomains: 0,
+      cookieFlows: 0,
+      labeledCookieFlows: 0,
       trkCookieFlows: 0,
       trkCookieFlowDomains: 0,
-      cookieAssignmentLabeledFlows: 0,
 
       storageItems: 0,
       storageItemDomains: 0,
