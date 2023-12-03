@@ -46,30 +46,32 @@ export class ChromiumSession implements Session {
           }
         };
 
-        const frame = interceptedRequest.frame();
-        const requestURL = new URL(interceptedRequest.url());
-        const { protocol } = requestURL;
-        if (frame && (protocol === "http:" || protocol === "https:")) {
-          // @ts-ignore
-          const requestId = interceptedRequest._requestId as string;
-          // @ts-ignore
-          const frameId = frame._id as string;
-          const method = interceptedRequest.method();
-          const url = interceptedRequest.url();
-          const resourceType = interceptedRequest.resourceType();
+        try {
+          const frame = interceptedRequest.frame();
+          const requestURL = new URL(interceptedRequest.url());
+          const { protocol } = requestURL;
+          if (frame && (protocol === "http:" || protocol === "https:")) {
+            // @ts-ignore
+            const requestId = interceptedRequest._requestId as string;
+            // @ts-ignore
+            const frameId = frame._id as string;
+            const method = interceptedRequest.method();
+            const url = interceptedRequest.url();
+            const resourceType = interceptedRequest.resourceType();
 
-          requests = [
-            ...requests,
-            {
-              requestId,
-              frameId,
-              method,
-              url,
-              body: processBody(),
-              resourceType,
-            },
-          ];
-        }
+            requests = [
+              ...requests,
+              {
+                requestId,
+                frameId,
+                method,
+                url,
+                body: processBody(),
+                resourceType,
+              },
+            ];
+          }
+        } catch {}
 
         interceptedRequest.continue();
       });
