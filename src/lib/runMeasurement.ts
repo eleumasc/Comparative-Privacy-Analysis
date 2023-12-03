@@ -11,27 +11,19 @@ import path from "path";
 
 interface SiteReport {
   cookies: number;
-  cookieDomains: number;
   trkCookies: number;
-  trkCookieDomains: number;
   cookieFlows: number;
   labeledCookieFlows: number;
   trkCookieFlows: number;
-  trkCookieFlowDomains: number;
 
   storageItems: number;
-  storageItemDomains: number;
   trkStorageItems: number;
-  trkStorageItemDomain: number;
   trkStorageItemFlows: number;
-  trkStorageItemFlowDomains: number;
 
   trkFlows: number;
-  trkFlowDomains: number;
   intnSameSiteTrkFlows: number;
   xdomSameSiteTrkFlows: number;
   trackers: string[];
-  trackerDomains: number;
   intnSameSiteTrackers: string[];
   xdomSameSiteTrackers: string[];
 }
@@ -49,7 +41,7 @@ interface AggregateReport {
   storageItems: number;
   storageItemDomains: number;
   trkStorageItems: number;
-  trkStorageItemDomain: number;
+  trkStorageItemDomains: number;
   trkStorageItemFlows: number;
   trkStorageItemFlowDomains: number;
 
@@ -281,27 +273,19 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
 
   return {
     cookies: cookieKeys.length, // 1.A
-    cookieDomains: cookieKeys.length > 0 ? 1 : 0, // 1.A
     trkCookies: trkCookieKeys.length, // 1.B
-    trkCookieDomains: trkCookieKeys.length > 0 ? 1 : 0, // 1.B
     cookieFlows: cookieFlows.length, // 1.C
     labeledCookieFlows: labeledCookieFlows.length, // 1.D
     trkCookieFlows: trkCookieFlows.length, // 1.D
-    trkCookieFlowDomains: trkCookieFlows.length > 0 ? 1 : 0, // 1.D
 
     storageItems: storageItemKeys.length, // 2.A
-    storageItemDomains: storageItemKeys.length > 0 ? 1 : 0, // 2.A
     trkStorageItems: trkStorageItemKeys.length, // 2.B
-    trkStorageItemDomain: trkStorageItemKeys.length > 0 ? 1 : 0, // 2.B
     trkStorageItemFlows: trkStorageItemFlows.length, // 2.C
-    trkStorageItemFlowDomains: trkStorageItemFlows.length > 0 ? 1 : 0, // 2.C
 
     trkFlows: trkFlows.length, // 3.A
-    trkFlowDomains: trkFlows.length > 0 ? 1 : 0, // 3.B
     intnSameSiteTrkFlows: intnSameSiteTrkFlows.length, // 3.C
     xdomSameSiteTrkFlows: xdomSameSiteTrkFlows.length, // 3.C
     trackers, // 3.D, 3.F
-    trackerDomains: trackers.length > 0 ? 1 : 0, // 3.D
     intnSameSiteTrackers, // 3.E
     xdomSameSiteTrackers, // 3.E
 
@@ -328,32 +312,33 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
     (acc, cur) => {
       return {
         cookies: acc.cookies + cur.cookies,
-        cookieDomains: acc.cookieDomains + cur.cookieDomains,
+        cookieDomains: acc.cookieDomains + (cur.cookies > 0 ? 1 : 0),
         trkCookies: acc.trkCookies + cur.trkCookies,
-        trkCookieDomains: acc.trkCookieDomains + cur.trkCookieDomains,
+        trkCookieDomains: acc.trkCookieDomains + (cur.trkCookies > 0 ? 1 : 0),
         cookieFlows: acc.cookieFlows + cur.cookieFlows,
         labeledCookieFlows: acc.labeledCookieFlows + cur.labeledCookieFlows,
         trkCookieFlows: acc.trkCookieFlows + cur.trkCookieFlows,
         trkCookieFlowDomains:
-          acc.trkCookieFlowDomains + cur.trkCookieFlowDomains,
+          acc.trkCookieFlowDomains + (cur.trkCookieFlows > 0 ? 1 : 0),
 
         storageItems: acc.storageItems + cur.storageItems,
-        storageItemDomains: acc.storageItemDomains + cur.storageItemDomains,
+        storageItemDomains:
+          acc.storageItemDomains + (cur.storageItems > 0 ? 1 : 0),
         trkStorageItems: acc.trkStorageItems + cur.trkStorageItems,
-        trkStorageItemDomain:
-          acc.trkStorageItemDomain + cur.trkStorageItemDomain,
+        trkStorageItemDomains:
+          acc.trkStorageItemDomains + (cur.trkStorageItems > 0 ? 1 : 0),
         trkStorageItemFlows: acc.trkStorageItemFlows + cur.trkStorageItemFlows,
         trkStorageItemFlowDomains:
-          acc.trkStorageItemFlowDomains + cur.trkStorageItemFlowDomains,
+          acc.trkStorageItemFlowDomains + (cur.trkStorageItemFlows > 0 ? 1 : 0),
 
         trkFlows: acc.trkFlows + cur.trkFlows,
-        trkFlowDomains: acc.trkFlowDomains + cur.trkFlowDomains,
+        trkFlowDomains: acc.trkFlowDomains + (cur.trkFlows > 0 ? 1 : 0),
         intnSameSiteTrkFlows:
           acc.intnSameSiteTrkFlows + cur.intnSameSiteTrkFlows,
         xdomSameSiteTrkFlows:
           acc.xdomSameSiteTrkFlows + cur.xdomSameSiteTrkFlows,
         trackers: trackers.length,
-        trackerDomains: acc.trackerDomains + cur.trackerDomains,
+        trackerDomains: acc.trackerDomains + (cur.trackers.length > 0 ? 1 : 0),
         intnSameSiteTrackers: intnSameSiteTrackers,
         xdomSameSiteTrackers: xdomSameSiteTrackers,
         trackerRanking,
@@ -372,7 +357,7 @@ const aggregate = (siteReports: SiteReport[]): AggregateReport => {
       storageItems: 0,
       storageItemDomains: 0,
       trkStorageItems: 0,
-      trkStorageItemDomain: 0,
+      trkStorageItemDomains: 0,
       trkStorageItemFlows: 0,
       trkStorageItemFlowDomains: 0,
 
@@ -402,5 +387,6 @@ const rankTrackers = (siteReports: SiteReport[]): TrackerRankingEntry[] => {
     .map(
       ([tracker, popularity]): TrackerRankingEntry => ({ tracker, popularity })
     )
-    .sort((a, b) => -(a.popularity - b.popularity));
+    .sort((a, b) => -(a.popularity - b.popularity))
+    .filter(({ popularity }) => popularity > 1);
 };
