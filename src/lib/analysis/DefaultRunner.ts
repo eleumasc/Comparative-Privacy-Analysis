@@ -1,7 +1,5 @@
 import assert from "assert";
-import Completer from "../util/Completer";
 import { divide } from "../util/array";
-import { getOrCreateMapValue } from "../util/map";
 import { Runner, RunnerContext, SiteEntry } from "./Runner";
 import { SessionEntry } from "./Session";
 
