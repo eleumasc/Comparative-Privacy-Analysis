@@ -1,9 +1,16 @@
 import assert from "assert";
 import { Config } from "./Config";
 import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
-import { Flow, equalsFlow, getFlowsFromTaintReport } from "./measurement/Flow";
-import { BrowserId, SiteAnalysisData } from "./measurement/SiteAnalysisResult";
-import { Frame, KeyValuePair, Request, SitesEntry, TaintReport } from "./model";
+import { Flow, equalsFlow, getFrameFlows } from "./measurement/Flow";
+import { BrowserId, SiteAnalysisData } from "./measurement/SiteAnalysisData";
+import {
+  AnalysisDetail,
+  Cookie,
+  Frame,
+  Request,
+  SitesEntry,
+  StorageItem,
+} from "./model";
 import { distinct, mapSequentialAsync } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
@@ -13,6 +20,7 @@ import { unionSet } from "./util/set";
 interface SiteReport {
   cookies: number;
   trkCookies: number;
+  // xsTrkCookies: number; // distinct tracking cookie keys that we observe in a 3rd-party context
   cookieFlows: number;
   labeledCookieFlows: number;
   trkCookieFlows: number;
@@ -23,7 +31,10 @@ interface SiteReport {
 
   tfAggregateReport: SiteAggregateReport;
 
+  ffAggregateReport: SiteAggregateReport;
+  fxAggregateReport: SiteAggregateReport;
   brAggregateReport: SiteAggregateReport;
+  bxAggregateReport: SiteAggregateReport;
 }
 
 interface SiteAggregateReport {
@@ -34,7 +45,6 @@ interface SiteAggregateReport {
   intnSameSiteTrackers: string[];
   xdomSameSiteTrackers: string[];
 
-  // xsTrkCookies: number; // distinct tracking cookie keys that we observe in a 3rd-party context
   // xsTrkFlows: number; // distinct flows from tracking cookie/storageItem that we observe in a 3rd-party context
 }
 
@@ -57,7 +67,10 @@ interface GlobalReport {
 
   tfAggregateReport: GlobalAggregateReport;
 
+  ffAggregateReport: GlobalAggregateReport;
+  fxAggregateReport: GlobalAggregateReport;
   brAggregateReport: GlobalAggregateReport;
+  bxAggregateReport: GlobalAggregateReport;
 }
 
 interface GlobalAggregateReport {
@@ -85,7 +98,7 @@ export const runMeasurement = async (config: Config) => {
     JSON.parse(
       (await readFile(path.join(outputPath, "sites.json"))).toString()
     ) as SitesEntry[]
-  ).slice(0, 250); // TODO: remove slicing
+  ).slice(0, 50); // TODO: remove slicing
 
   const totalCount = sitesEntries.length;
   const successSitesEntries = sitesEntries.filter(
@@ -139,61 +152,85 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     runId: "A",
   })[0];
 
-  const tf1AFrame = tf1A.frames[0];
-  assert(typeof tf1AFrame !== "undefined", "Main frame does not exist");
-  const tf1BFrame = tf1B.frames[0];
-  const tf2AFrame = tf2A.frames[0];
-  assert(
-    typeof tf1BFrame !== "undefined" && typeof tf2AFrame !== "undefined",
-    "No matching frame found"
-  );
+  interface ContextFrame {
+    frame: Frame;
+    requests: Request[];
+  }
 
-  const equalsKey = (
-    { key: k1 }: KeyValuePair,
-    { key: k2 }: KeyValuePair
-  ): boolean => k1 === k2;
-  const cookies1A = distinct(tf1AFrame.cookies, equalsKey);
-  const cookies1B = distinct(tf1BFrame.cookies, equalsKey);
-  const cookies2A = distinct(tf2AFrame.cookies, equalsKey);
-  const cookieKeys = distinct([
-    ...cookies1A.map((cookie) => cookie.key),
-    ...cookies1B.map((cookie) => cookie.key),
-  ]);
-  const trkCookieKeys = cookieSwapPartyHeuristics(
-    cookies1A,
-    cookies1B,
-    cookies2A,
-    true
-  );
-  const storageItems1A = distinct(tf1AFrame.storageItems, equalsKey);
-  const storageItems1B = distinct(tf1BFrame.storageItems, equalsKey);
-  const storageItems2A = distinct(tf2AFrame.storageItems, equalsKey);
-  const storageItemKeys = distinct([
-    ...storageItems1A.map((storageItem) => storageItem.key),
-    ...storageItems1B.map((storageItem) => storageItem.key),
-  ]);
-  const trkStorageItemKeys = cookieSwapPartyHeuristics(
-    storageItems1A,
-    storageItems1B,
-    storageItems2A
-  );
+  interface Context {
+    origin: string;
+    cookies: Cookie[];
+    storageItems: StorageItem[];
+    frames: ContextFrame[];
+  }
 
-  const getFlowsFromTaintReports = (
-    taintReports: TaintReport[],
-    frame: Frame
-  ): Flow[] => {
-    return taintReports.flatMap((taintReport) =>
-      getFlowsFromTaintReport(taintReport, frame)
-    );
+  interface ContextSet {
+    firstPartyContext: Context;
+    thirdPartyContexts: Context[];
+  }
+
+  const getContextSet = (detail: AnalysisDetail): ContextSet => {
+    const contextMap = detail.frames.reduce((contextMap, frame) => {
+      const origin = new URL(frame.url).origin;
+      const requests = detail.requests.filter(
+        (request) => request.frameId === frame.frameId
+      );
+      const frames = contextMap.get(origin) ?? [];
+      return contextMap.set(origin, [...frames, { frame, requests }]);
+    }, new Map<string, ContextFrame[]>());
+    const contexts: Context[] = [...contextMap].map(([origin, frames]) => {
+      const representativeFrame = frames[0].frame;
+      const cookies = representativeFrame.cookies;
+      const storageItems = representativeFrame.storageItems;
+      return { origin, cookies, storageItems, frames };
+    });
+    assert(contexts.length > 0);
+    return {
+      firstPartyContext: contexts[0],
+      thirdPartyContexts: contexts.slice(1),
+    };
   };
-  const frameSite = getSiteFromHostname(new URL(tf1AFrame.url).hostname);
+
+  const tf1ACtxSet = getContextSet(tf1A);
+  const tf1BCtxSet = getContextSet(tf1B);
+  const tf2ACtxSet = getContextSet(tf2A);
+
+  const tf1ACtx = tf1ACtxSet.firstPartyContext;
+  const tf1BCtx = tf1BCtxSet.firstPartyContext;
+  assert(tf1BCtx.origin === tf1ACtx.origin);
+  const tf2ACtx = tf2ACtxSet.firstPartyContext;
+  assert(tf2ACtx.origin === tf1ACtx.origin);
+
+  const tf1ACookies = tf1ACtx.cookies;
+  const tf1BCookies = tf1BCtx.cookies;
+  const tf2ACookies = tf2ACtx.cookies;
+  const cookieKeys = distinct(
+    [...tf1ACookies, ...tf1BCookies].map(({ key }) => key)
+  );
+  const trkCookieKeys = distinct(
+    cookieSwapPartyHeuristics(tf1ACookies, tf1BCookies, tf2ACookies, true)
+  );
+  const tf1AStorageItems = tf1ACtx.storageItems;
+  const tf1BStorageItems = tf1BCtx.storageItems;
+  const tf2AStorageItems = tf2ACtx.storageItems;
+  const storageItemKeys = distinct(
+    [...tf1AStorageItems, ...tf1BStorageItems].map(({ key }) => key)
+  );
+  const trkStorageItemKeys = distinct(
+    cookieSwapPartyHeuristics(
+      tf1AStorageItems,
+      tf1BStorageItems,
+      tf2AStorageItems
+    )
+  );
+
+  const originSite = getSiteFromHostname(new URL(tf1ACtx.origin).hostname);
   const flows = distinct(
-    [
-      ...getFlowsFromTaintReports(tf1AFrame.taintReports!, tf1AFrame),
-      ...getFlowsFromTaintReports(tf1BFrame.taintReports!, tf1BFrame),
-    ],
+    [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(({ frame }) =>
+      getFrameFlows(frame)
+    ),
     equalsFlow
-  ).filter((flow) => flow.targetSite !== frameSite); // consider just cross-site flows
+  ).filter((flow) => flow.targetSite !== originSite); // consider just cross-site flows
 
   const cookieFlows = flows.filter((flow) => flow.source === "cookie");
   const labeledCookieFlows = cookieFlows.filter(
@@ -218,10 +255,9 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     return requests.filter((request) => request.frameId === frameId);
   };
 
-  const requests = [
-    ...selectRequestsByFrameId(tf1A.requests, tf1AFrame.frameId),
-    ...selectRequestsByFrameId(tf1B.requests, tf1BFrame.frameId),
-  ];
+  const requests = [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(
+    ({ requests }) => requests
+  );
   const tfAggregateReport = getSiteAggregateReport(trkFlows, requests);
 
   const compareBrowser = (
@@ -316,7 +352,10 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     );
   };
 
+  const ffAggregateReport = getAggregateReportForOtherBrowser("firefox");
+  const fxAggregateReport = getAggregateReportForOtherBrowser("firefox-nops");
   const brAggregateReport = getAggregateReportForOtherBrowser("brave");
+  const bxAggregateReport = getAggregateReportForOtherBrowser("brave-aggr");
 
   return {
     cookies: cookieKeys.length, // 1.A
@@ -331,7 +370,10 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
 
     tfAggregateReport, // 3.A, ..., 3.F
 
+    ffAggregateReport,
+    fxAggregateReport,
     brAggregateReport,
+    bxAggregateReport,
   };
 };
 
@@ -382,7 +424,7 @@ const getGlobalReport = (siteReports: SiteReport[]): GlobalReport => {
     xdomSameSiteTrackers: [],
     trackerRanking: [],
   };
-  const createGetGlobalAggregateReport = (
+  const createReduceGlobalAggregateReport = (
     siteAggregateReports: SiteAggregateReport[]
   ) => {
     const trackers = distinct(
@@ -422,11 +464,21 @@ const getGlobalReport = (siteReports: SiteReport[]): GlobalReport => {
     };
   };
 
-  const getTfGlobalAggregateReport = createGetGlobalAggregateReport(
+  const tfReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
     siteReports.map(({ tfAggregateReport }) => tfAggregateReport)
   );
-  const getBrGlobalAggregateReport = createGetGlobalAggregateReport(
+
+  const ffReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
+    siteReports.map(({ ffAggregateReport }) => ffAggregateReport)
+  );
+  const fxReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
+    siteReports.map(({ fxAggregateReport }) => fxAggregateReport)
+  );
+  const brReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
     siteReports.map(({ brAggregateReport }) => brAggregateReport)
+  );
+  const bxReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
+    siteReports.map(({ bxAggregateReport }) => bxAggregateReport)
   );
 
   return siteReports.reduce<GlobalReport>(
@@ -452,13 +504,26 @@ const getGlobalReport = (siteReports: SiteReport[]): GlobalReport => {
         trkStorageItemFlowDomains:
           acc.trkStorageItemFlowDomains + (cur.trkStorageItemFlows > 0 ? 1 : 0),
 
-        tfAggregateReport: getTfGlobalAggregateReport(
+        tfAggregateReport: tfReduceGlobalAggregateReport(
           acc.tfAggregateReport,
           cur.tfAggregateReport
         ),
-        brAggregateReport: getBrGlobalAggregateReport(
+
+        ffAggregateReport: ffReduceGlobalAggregateReport(
+          acc.ffAggregateReport,
+          cur.ffAggregateReport
+        ),
+        fxAggregateReport: fxReduceGlobalAggregateReport(
+          acc.fxAggregateReport,
+          cur.fxAggregateReport
+        ),
+        brAggregateReport: brReduceGlobalAggregateReport(
           acc.brAggregateReport,
           cur.brAggregateReport
+        ),
+        bxAggregateReport: bxReduceGlobalAggregateReport(
+          acc.bxAggregateReport,
+          cur.bxAggregateReport
         ),
       };
     },
@@ -481,7 +546,10 @@ const getGlobalReport = (siteReports: SiteReport[]): GlobalReport => {
 
       tfAggregateReport: globalAggregateReportBase,
 
+      ffAggregateReport: globalAggregateReportBase,
+      fxAggregateReport: globalAggregateReportBase,
       brAggregateReport: globalAggregateReportBase,
+      bxAggregateReport: globalAggregateReportBase,
     }
   );
 };

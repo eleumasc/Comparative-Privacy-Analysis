@@ -78,57 +78,59 @@ const assignCookieKeys = (value: string, cookies: Cookie[]): string[] => {
     .map(({ key }) => key);
 };
 
-export const getFlowsFromTaintReport = (
-  taintReport: TaintReport,
-  frame: Frame
-): Flow[] => {
-  const networkSink = getNetworkSinkFromTaintReport(taintReport, frame.baseUrl);
-  if (!networkSink) {
-    return [];
-  }
-  const { targetURL: sinkTargetURL, scriptURL: sinkScriptURL } = networkSink;
+export const getFrameFlows = (frame: Frame): Flow[] => {
+  return frame.taintReports!.flatMap((taintReport) => {
+    const networkSink = getNetworkSinkFromTaintReport(
+      taintReport,
+      frame.baseUrl
+    );
+    if (!networkSink) {
+      return [];
+    }
+    const { targetURL: sinkTargetURL, scriptURL: sinkScriptURL } = networkSink;
 
-  const { str, sink, taint } = taintReport;
+    const { str, sink, taint } = taintReport;
 
-  const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
-  const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
-  const createSingleFlow = (source: Source, sourceKeys: string[]) => {
-    return {
-      source,
-      sourceKeys,
-      sink,
-      targetSite,
-      sinkScriptUrl,
+    const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
+    const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
+    const createSingleFlow = (source: Source, sourceKeys: string[]) => {
+      return {
+        source,
+        sourceKeys,
+        sink,
+        targetSite,
+        sinkScriptUrl,
+      };
     };
-  };
 
-  const cookieFlows = taint
-    .filter((taintFlow) => {
-      const { operation: opType } = taintFlow.operation;
-      return opType === "document.cookie";
-    })
-    .map(
-      (taintFlow): Flow =>
-        createSingleFlow(
-          "cookie",
-          assignCookieKeys(
-            str.substring(taintFlow.begin, taintFlow.end),
-            frame.cookies
+    const cookieFlows = taint
+      .filter((taintFlow) => {
+        const { operation: opType } = taintFlow.operation;
+        return opType === "document.cookie";
+      })
+      .map(
+        (taintFlow): Flow =>
+          createSingleFlow(
+            "cookie",
+            assignCookieKeys(
+              str.substring(taintFlow.begin, taintFlow.end),
+              frame.cookies
+            )
           )
-        )
-    );
+      );
 
-  const storageItemFlows = taint
-    .filter((taintFlow) => {
-      const { operation: opType } = taintFlow.operation;
-      return opType === "localStorage.getItem";
-    })
-    .map(
-      (taintFlow): Flow =>
-        createSingleFlow("storageItem", [taintFlow.operation.arguments[0]])
-    );
+    const storageItemFlows = taint
+      .filter((taintFlow) => {
+        const { operation: opType } = taintFlow.operation;
+        return opType === "localStorage.getItem";
+      })
+      .map(
+        (taintFlow): Flow =>
+          createSingleFlow("storageItem", [taintFlow.operation.arguments[0]])
+      );
 
-  return [...cookieFlows, ...storageItemFlows];
+    return [...cookieFlows, ...storageItemFlows];
+  });
 };
 
 export const equalsFlow = (x: Flow, y: Flow): boolean => {
