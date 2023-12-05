@@ -120,10 +120,6 @@ export const runMeasurement = async (config: Config) => {
     (sitesEntry) => sitesEntry.failureError === "NavigationError"
   ).length;
   const successRate = successCount / (totalCount - navigationErrorCount);
-  console.log("totalCount", totalCount);
-  console.log("successCount", successCount);
-  console.log("navigationErrorCount", navigationErrorCount);
-  console.log("successRate", successRate);
 
   const slicedSuccessSitesEntries =
     sliceEnd !== null
@@ -146,7 +142,12 @@ export const runMeasurement = async (config: Config) => {
     )
   ).filter((x): x is NonNullable<typeof x> => x !== null);
 
-  console.log(getGlobalReport(siteReports));
+  console.log("totalCount", totalCount);
+  console.log("successCount", successCount);
+  console.log("navigationErrorCount", navigationErrorCount);
+  console.log("successRate", successRate);
+  console.log("siteReports", siteReports.length);
+  console.log("globalReport", JSON.stringify(getGlobalReport(siteReports)));
 };
 
 const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
