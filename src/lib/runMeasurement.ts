@@ -91,14 +91,25 @@ interface TrackerRankingEntry {
 }
 
 export const runMeasurement = async (config: Config) => {
-  const outputPath = process.argv[2];
-  assert(typeof outputPath === "string");
+  const outputPath = (() => {
+    const arg = process.argv[2];
+    assert(typeof arg === "string", "outputPath must be a string");
+    return arg;
+  })();
+  const sliceEnd = (() => {
+    const arg = process.argv[3];
+    if (typeof arg !== "undefined") {
+      const num = +arg;
+      assert(!Number.isNaN(num), "sliceEnd must be a number");
+      return num;
+    } else {
+      return undefined;
+    }
+  })();
 
-  const sitesEntries = (
-    JSON.parse(
-      (await readFile(path.join(outputPath, "sites.json"))).toString()
-    ) as SitesEntry[]
-  ).slice(0, 50); // TODO: remove slicing
+  const sitesEntries = JSON.parse(
+    (await readFile(path.join(outputPath, "sites.json"))).toString()
+  ) as SitesEntry[];
 
   const totalCount = sitesEntries.length;
   const successSitesEntries = sitesEntries.filter(
@@ -114,9 +125,14 @@ export const runMeasurement = async (config: Config) => {
   console.log("navigationErrorCount", navigationErrorCount);
   console.log("successRate", successRate);
 
+  const slicedSuccessSitesEntries =
+    sliceEnd !== null
+      ? successSitesEntries.slice(0, sliceEnd)
+      : successSitesEntries;
+
   const siteReports = (
     await mapSequentialAsync(
-      successSitesEntries,
+      slicedSuccessSitesEntries,
       async (siteEntry, siteIndex) => {
         const { site } = siteEntry;
         try {
