@@ -142,12 +142,16 @@ export const runMeasurement = async (config: Config) => {
     )
   ).filter((x): x is NonNullable<typeof x> => x !== null);
 
-  console.log("totalCount", totalCount);
-  console.log("successCount", successCount);
-  console.log("navigationErrorCount", navigationErrorCount);
-  console.log("successRate", successRate);
-  console.log("siteReports", siteReports.length);
-  console.log("globalReport", JSON.stringify(getGlobalReport(siteReports)));
+  console.log(
+    JSON.stringify({
+      totalCount: totalCount,
+      successCount: successCount,
+      navigationErrorCount: navigationErrorCount,
+      successRate: successRate,
+      siteReports: siteReports.length,
+      globalReport: getGlobalReport(siteReports),
+    })
+  );
 };
 
 const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
