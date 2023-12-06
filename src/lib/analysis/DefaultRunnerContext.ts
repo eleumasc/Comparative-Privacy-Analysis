@@ -4,6 +4,7 @@ import { AnalysisResult } from "../model";
 import { isWebsiteAvailable } from "../util/isWebsiteAvailable";
 import { getOrCreateMapValue } from "../util/map";
 import { RunnerContext, SiteEntry } from "./Runner";
+import { BrowserId } from "../BrowserId";
 
 export class DefaultRunnerContext implements RunnerContext {
   private siteLoggerMap: Map<number, SiteLogger> = new Map();
@@ -26,7 +27,12 @@ export class DefaultRunnerContext implements RunnerContext {
       this.logger.createSiteLogger(site, siteIndex)
     );
 
-    if (siteLogger.getFailureError(sessionBrowserId)) return;
+    if (
+      siteLogger.getFailureError("foxhound") ||
+      siteLogger.getFailureError(sessionBrowserId)
+    ) {
+      return;
+    }
 
     const logResult = (name: string, result: AnalysisResult) => {
       siteLogger.addLogfile(sessionBrowserId, name, JSON.stringify(result));
@@ -70,6 +76,12 @@ export class DefaultRunnerContext implements RunnerContext {
     const { site, siteIndex } = siteEntry;
 
     const siteLogger = this.siteLoggerMap.get(siteId)!;
+    if (siteLogger.getFailureError("foxhound")) {
+      for (const browserId of BrowserId) {
+        if (browserId === "foxhound") continue;
+        siteLogger.setFailureError(browserId, "Canceled");
+      }
+    }
     await siteLogger.persist();
 
     this.siteLoggerMap.delete(siteId);
