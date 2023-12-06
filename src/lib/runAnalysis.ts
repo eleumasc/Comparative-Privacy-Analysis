@@ -18,7 +18,7 @@ import { DefaultRunnerContext } from "./analysis/DefaultRunnerContext";
 import { getBrowserSignature } from "./BrowserId";
 
 const DEFAULT_SESSION_TIMEOUT = 75_000;
-const DEFAULT_SESSION_MAX_ATTEMPTS = 3;
+const DEFAULT_SESSION_MAX_ATTEMPTS = 2;
 
 const DEFAULT_CONCURRENCY_LEVEL = 6;
 const DEFAULT_COINCIDENCE_LEVEL = 4;
