@@ -95,3 +95,7 @@ browser.runtime.onMessage.addListener((message, _, sendResponse) => {
     }
   }
 });
+
+window.addEventListener("load", () => {
+  browser.runtime.sendMessage({ type: "load" });
+});

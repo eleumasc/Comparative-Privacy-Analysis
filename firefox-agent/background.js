@@ -56,70 +56,22 @@ const poll = async (callback, ttl, timeoutMs) => {
   }
 };
 
-const navigate = async (tabId, url) => {
-  const navigateCompleter = new Completer();
-
-  const STATE_START = 0;
-  const STATE_ERROR = 1;
-  const STATE_COMMITTED = 2;
-  let state = STATE_START;
-  let lastError = null;
-
-  const filterEvents = (listener) => {
-    return (details) => {
-      if (details.tabId === tabId && details.frameId === 0) {
-        listener(details);
+const navigate = async (tabId, url, timeoutMs) => {
+  const loadCompleter = new Completer();
+  const callback = (message, sender) => {
+    if (typeof message === "object" && message.type === "load") {
+      if (sender.tab.id === tabId && sender.frameId === 0) {
+        loadCompleter.complete();
       }
-    };
+    }
   };
 
-  const onBeforeNavigate = filterEvents(() => {
-    state = STATE_START;
-  });
-
-  const onCommitted = filterEvents(async () => {
-    switch (state) {
-      case STATE_START:
-        state = STATE_COMMITTED;
-        break;
-      case STATE_ERROR:
-        navigateCompleter.completeError(
-          new Error(`Navigation error: ${lastError}`)
-        );
-        break;
-      default:
-    }
-  });
-
-  const onCompleted = filterEvents(() => {
-    navigateCompleter.complete();
-  });
-
-  const onErrorOccurred = filterEvents((details) => {
-    state = STATE_ERROR;
-    lastError = details.error;
-  });
-
-  const webNavigation = browser.webNavigation;
-  const webNavigationFilter = { url: [{ schemes: ["http", "https"] }] };
-  webNavigation.onBeforeNavigate.addListener(
-    onBeforeNavigate,
-    webNavigationFilter
-  );
-  webNavigation.onCommitted.addListener(onCommitted, webNavigationFilter);
-  webNavigation.onCompleted.addListener(onCompleted, webNavigationFilter);
-  webNavigation.onErrorOccurred.addListener(
-    onErrorOccurred,
-    webNavigationFilter
-  );
+  browser.runtime.onMessage.addListener(callback);
   try {
     await browser.tabs.update(tabId, { url });
-    await navigateCompleter.promise;
+    await timeBomb(loadCompleter.promise, timeoutMs);
   } finally {
-    webNavigation.onBeforeNavigate.removeListener(onBeforeNavigate);
-    webNavigation.onCommitted.removeListener(onCommitted);
-    webNavigation.onCompleted.removeListener(onCompleted);
-    webNavigation.onErrorOccurred.removeListener(onErrorOccurred);
+    browser.runtime.onMessage.removeListener(callback);
   }
 };
 
@@ -230,7 +182,7 @@ const useNetworkLogging = async (tabId, callback) => {
 
 const runAnalysis = async ({ url, isFoxhound }) => {
   const process = async (tabId, networkLoggingState) => {
-    await timeBomb(navigate(tabId, url), 60_000);
+    await navigate(tabId, url, 60_000);
     await asyncDelay(5_000);
 
     const frames = (
