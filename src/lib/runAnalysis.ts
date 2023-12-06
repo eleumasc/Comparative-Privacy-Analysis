@@ -15,6 +15,7 @@ import {
 import { DefaultRunner } from "./analysis/DefaultRunner";
 import { SiteEntry } from "./analysis/Runner";
 import { DefaultRunnerContext } from "./analysis/DefaultRunnerContext";
+import { getBrowserSignature } from "./BrowserId";
 
 const DEFAULT_SESSION_TIMEOUT = 75_000;
 const DEFAULT_SESSION_MAX_ATTEMPTS = 3;
@@ -107,53 +108,85 @@ export const runAnalysis = async (config: Config) => {
       );
     };
 
-    const sessionEntries: SessionEntry[] = Object.entries({
-      // tf1: createFoxhoundSession("tf1"),
-      // tf2: createFoxhoundSession("tf2"),
-      // ff1: createFirefoxSession("ff1"),
-      // ff2: createFirefoxSession("ff2"),
-      // ff3: createFirefoxSession("ff3"),
-      // ff4: createFirefoxSession("ff4"),
-      // ff5: createFirefoxSession("ff5"),
-      // fx1: createFirefoxSession("fx1", true),
-      // fx2: createFirefoxSession("fx2", true),
-      // fx3: createFirefoxSession("fx3", true),
-      // fx4: createFirefoxSession("fx4", true),
-      // fx5: createFirefoxSession("fx5", true),
-      // br1: createBraveSession("br1"),
-      // br2: createBraveSession("br2"),
-      // br3: createBraveSession("br3"),
-      // br4: createBraveSession("br4"),
-      // br5: createBraveSession("br5"),
-      // bx1: createBraveSession("bx1", true),
-      // bx2: createBraveSession("bx2", true),
-      // bx3: createBraveSession("bx3", true),
-      // bx4: createBraveSession("bx4", true),
-      // bx5: createBraveSession("bx5", true),
+    const tfSessionEntry = (index: number): SessionEntry => {
+      const name = `${getBrowserSignature("foxhound")}${index}`;
+      return {
+        browserId: "foxhound",
+        name,
+        controller: tfSessionController(name),
+      };
+    };
 
-      tf1: tfSessionController("tf1"),
-      tf2: tfSessionController("tf2"),
-      br1: brSessionController("br1"),
-      br2: brSessionController("br2"),
-      ff1: ffSessionController("ff1"),
-      ff2: ffSessionController("ff2"),
-      br3: brSessionController("br3"),
-      br4: brSessionController("br4"),
-      ff3: ffSessionController("ff3"),
-      ff4: ffSessionController("ff4"),
-      br5: brSessionController("br5"),
-      bx1: brSessionController("bx1", true),
-      ff5: ffSessionController("ff5"),
-      fx1: ffSessionController("fx1", true),
-      bx2: brSessionController("bx2", true),
-      bx3: brSessionController("bx3", true),
-      fx2: ffSessionController("fx2", true),
-      fx3: ffSessionController("fx3", true),
-      bx4: brSessionController("bx4", true),
-      bx5: brSessionController("bx5", true),
-      fx4: ffSessionController("fx4", true),
-      fx5: ffSessionController("fx5", true),
-    }).map(([name, controller]) => ({ name, controller }));
+    const ffSessionEntry = (index: number): SessionEntry => {
+      const name = `${getBrowserSignature("firefox")}${index}`;
+      return {
+        browserId: "firefox",
+        name,
+        controller: ffSessionController(name),
+      };
+    };
+
+    const fxSessionEntry = (index: number): SessionEntry => {
+      const name = `${getBrowserSignature("firefox-nops")}${index}`;
+      return {
+        browserId: "firefox-nops",
+        name,
+        controller: ffSessionController(name, true),
+      };
+    };
+
+    const brSessionEntry = (index: number): SessionEntry => {
+      const name = `${getBrowserSignature("brave")}${index}`;
+      return {
+        browserId: "brave",
+        name,
+        controller: brSessionController(name),
+      };
+    };
+
+    const bxSessionEntry = (index: number): SessionEntry => {
+      const name = `${getBrowserSignature("brave-aggr")}${index}`;
+      return {
+        browserId: "brave-aggr",
+        name,
+        controller: brSessionController(name, true),
+      };
+    };
+
+    const sessionEntries: SessionEntry[] = [
+      tfSessionEntry(1),
+      tfSessionEntry(2),
+
+      brSessionEntry(1),
+      brSessionEntry(2),
+
+      ffSessionEntry(1),
+      ffSessionEntry(2),
+
+      brSessionEntry(3),
+      brSessionEntry(4),
+
+      ffSessionEntry(3),
+      ffSessionEntry(4),
+
+      brSessionEntry(5),
+      bxSessionEntry(1),
+
+      ffSessionEntry(5),
+      fxSessionEntry(1),
+
+      bxSessionEntry(2),
+      bxSessionEntry(3),
+
+      fxSessionEntry(2),
+      fxSessionEntry(3),
+
+      bxSessionEntry(4),
+      bxSessionEntry(5),
+
+      fxSessionEntry(4),
+      fxSessionEntry(5),
+    ];
 
     const siteEntries: SiteEntry[] = siteList.map((site, siteIndex) => ({
       site,

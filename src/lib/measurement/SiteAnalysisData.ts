@@ -2,20 +2,7 @@ import { readFile } from "fs/promises";
 import { AnalysisDetail, AnalysisResult } from "../model";
 import path from "path";
 import assert from "assert";
-
-export const BrowserId = [
-  "foxhound",
-  "firefox",
-  "firefox-nops",
-  "brave",
-  "brave-aggr",
-] as const;
-
-export type BrowserId = (typeof BrowserId)[number];
-
-export const RunId = ["A", "B"] as const;
-
-export type RunId = (typeof RunId)[number];
+import { BrowserId, RunId, getBrowserSignature } from "../BrowserId";
 
 export interface AnalysisLabel {
   browserId: BrowserId;
@@ -54,27 +41,12 @@ export class SiteAnalysisData {
   }
 
   static async fromFile(outputPath: string, site: string) {
-    const browserSuffixPart = (browserId: BrowserId): string => {
-      switch (browserId) {
-        case "foxhound":
-          return "tf";
-        case "firefox":
-          return "ff";
-        case "firefox-nops":
-          return "fx";
-        case "brave":
-          return "br";
-        case "brave-aggr":
-          return "bx";
-      }
-    };
-
     const entry = async (
       browserId: BrowserId,
       index: number,
       runId: RunId
     ): Promise<SiteAnalysisDataEntry> => {
-      const suffix = `${browserSuffixPart(browserId)}${index}${runId}`;
+      const suffix = `${getBrowserSignature(browserId)}${index}${runId}`;
       const result = JSON.parse(
         (
           await readFile(path.join(outputPath, `${site}+${suffix}.json`))

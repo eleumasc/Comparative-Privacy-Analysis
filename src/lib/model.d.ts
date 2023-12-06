@@ -1,8 +1,19 @@
+import { BrowserId } from "./BrowserId";
+
 export interface SitesEntry {
   site: string;
-  failureError: string | null;
   siteIndex: number;
   startTime: number;
+  failureErrorEntries: FailureErrorEntry[];
+}
+
+export interface FailureErrorEntry {
+  browserId: BrowserId;
+  failureError: string | null;
+}
+
+export interface FailureErrorEntry {
+  browserId: BrowserId;
 }
 
 export interface BaseAnalysisResult {

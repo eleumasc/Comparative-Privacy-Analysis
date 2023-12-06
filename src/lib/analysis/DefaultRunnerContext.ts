@@ -5,13 +5,8 @@ import { isWebsiteAvailable } from "../util/isWebsiteAvailable";
 import { getOrCreateMapValue } from "../util/map";
 import { RunnerContext, SiteEntry } from "./Runner";
 
-interface DefaultRunnerContextState {
-  siteLogger: SiteLogger;
-  failure: boolean;
-}
-
 export class DefaultRunnerContext implements RunnerContext {
-  stateMap: Map<number, DefaultRunnerContextState> = new Map();
+  private siteLoggerMap: Map<number, SiteLogger> = new Map();
 
   constructor(readonly logger: Logger) {}
 
@@ -21,18 +16,20 @@ export class DefaultRunnerContext implements RunnerContext {
     sessionEntry: SessionEntry
   ): Promise<void> {
     const { site, siteIndex, url } = siteEntry;
-    const { name: sessionName, controller: sessionController } = sessionEntry;
+    const {
+      browserId: sessionBrowserId,
+      name: sessionName,
+      controller: sessionController,
+    } = sessionEntry;
 
-    const state = getOrCreateMapValue(this.stateMap, siteId, () => ({
-      siteLogger: this.logger.createSiteLogger(site, siteIndex),
-      failure: false,
-    }));
-    const { siteLogger, failure } = state;
+    const siteLogger = getOrCreateMapValue(this.siteLoggerMap, siteId, () =>
+      this.logger.createSiteLogger(site, siteIndex)
+    );
 
-    if (failure) return;
+    if (!siteLogger.getFailureError(sessionBrowserId)) return;
 
     const logResult = (name: string, result: AnalysisResult) => {
-      siteLogger.addLogfile(name, JSON.stringify(result));
+      siteLogger.addLogfile(sessionBrowserId, name, JSON.stringify(result));
     };
 
     console.log(
@@ -55,7 +52,14 @@ export class DefaultRunnerContext implements RunnerContext {
       await run("A");
       await run("B");
     } catch (e) {
-      state.failure = true;
+      siteLogger.setFailureError(
+        sessionBrowserId,
+        sessionBrowserId === "foxhound"
+          ? (await isWebsiteAvailable(url))
+            ? "AnalysisError"
+            : "NavigationError"
+          : "AnalysisError"
+      );
       console.log(e);
     }
 
@@ -63,18 +67,12 @@ export class DefaultRunnerContext implements RunnerContext {
   }
 
   async endSiteAnalysis(siteId: number, siteEntry: SiteEntry): Promise<void> {
-    const { site, siteIndex, url } = siteEntry;
+    const { site, siteIndex } = siteEntry;
 
-    const { siteLogger, failure } = this.stateMap.get(siteId)!;
-
-    if (failure) {
-      siteLogger.failure(
-        (await isWebsiteAvailable(url)) ? "AnalysisError" : "NavigationError"
-      );
-    }
+    const siteLogger = this.siteLoggerMap.get(siteId)!;
     await siteLogger.persist();
 
-    this.stateMap.delete(siteId);
+    this.siteLoggerMap.delete(siteId);
 
     console.log(`*** DONE ${siteIndex}: ${site}`);
   }

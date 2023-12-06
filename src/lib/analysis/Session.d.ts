@@ -1,3 +1,4 @@
+import { BrowserId } from "../BrowserId";
 import { AnalysisResult } from "../model";
 
 export interface Session {
@@ -7,7 +8,8 @@ export interface Session {
 
 export interface SessionController extends Session {}
 
-interface SessionEntry {
+export interface SessionEntry {
+  browserId: BrowserId;
   name: string;
   controller: SessionController;
 }

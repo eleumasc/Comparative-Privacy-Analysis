@@ -1,7 +1,8 @@
 import { writeFileSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
-import { SitesEntry } from "../model";
+import { FailureErrorEntry, SitesEntry } from "../model";
+import { BrowserId } from "../BrowserId";
 
 interface Logfile {
   name: string;
@@ -29,9 +30,25 @@ export class Logger {
   }
 }
 
+interface SiteLoggerBrowserState {
+  logfiles: Logfile[];
+  failureError: string | null;
+}
+
+const createSiteLoggerBrowserState = () => {
+  return { logfiles: [], failureError: null };
+};
+
+type SiteLoggerBrowserStateRecord = Record<BrowserId, SiteLoggerBrowserState>;
+
 export class SiteLogger {
-  private logfiles: Logfile[] = [];
-  private failureError: string | null = null;
+  private stateRecord: SiteLoggerBrowserStateRecord = {
+    foxhound: createSiteLoggerBrowserState(),
+    firefox: createSiteLoggerBrowserState(),
+    "firefox-nops": createSiteLoggerBrowserState(),
+    brave: createSiteLoggerBrowserState(),
+    "brave-aggr": createSiteLoggerBrowserState(),
+  };
   private startTime = +new Date();
 
   constructor(
@@ -40,12 +57,18 @@ export class SiteLogger {
     readonly siteIndex: number
   ) {}
 
-  addLogfile(name: string, payload: string): void {
-    this.logfiles = [...this.logfiles, { name, payload }];
+  addLogfile(browserId: BrowserId, name: string, payload: string): void {
+    const state = this.stateRecord[browserId];
+    state.logfiles = [...state.logfiles, { name, payload }];
   }
 
-  failure(failureError: string): void {
-    this.failureError = failureError;
+  getFailureError(browserId: BrowserId): string | null {
+    return this.stateRecord[browserId].failureError;
+  }
+
+  setFailureError(browserId: BrowserId, failureError: string | null): void {
+    const state = this.stateRecord[browserId];
+    state.failureError = failureError;
   }
 
   async persist(): Promise<void> {
@@ -54,20 +77,29 @@ export class SiteLogger {
 
     await mkdir(outputBasePath, { recursive: true });
 
-    if (this.failureError === null) {
-      for (const logfile of this.logfiles) {
-        await writeFile(
-          path.join(outputBasePath, `${this.site}+${logfile.name}.json`),
-          logfile.payload
-        );
+    for (const state of Object.values(this.stateRecord)) {
+      if (state.failureError === null) {
+        for (const logfile of state.logfiles) {
+          await writeFile(
+            path.join(outputBasePath, `${this.site}+${logfile.name}.json`),
+            logfile.payload
+          );
+        }
       }
     }
 
     const sitesEntry: SitesEntry = {
       site: this.site,
       siteIndex: this.siteIndex,
-      failureError: this.failureError,
       startTime: this.startTime,
+      failureErrorEntries: Object.entries(this.stateRecord).map(
+        ([browserId, state]): FailureErrorEntry => {
+          return {
+            browserId: browserId as BrowserId,
+            failureError: state.failureError,
+          };
+        }
+      ),
     };
     await logger.updateSites(sitesEntry);
   }
