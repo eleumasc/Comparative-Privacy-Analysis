@@ -47,7 +47,7 @@ export class DefaultRunnerContext implements RunnerContext {
         logResult(name, result);
       } else {
         console.log(`failure ${siteIndex}: ${site} [${sessionName}]`);
-        throw new Error(`failure ${name}`);
+        throw new Error(`failure ${name}: ${result.reason}`);
       }
     };
 
