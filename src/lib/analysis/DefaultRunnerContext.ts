@@ -26,7 +26,7 @@ export class DefaultRunnerContext implements RunnerContext {
       this.logger.createSiteLogger(site, siteIndex)
     );
 
-    if (!siteLogger.getFailureError(sessionBrowserId)) return;
+    if (siteLogger.getFailureError(sessionBrowserId)) return;
 
     const logResult = (name: string, result: AnalysisResult) => {
       siteLogger.addLogfile(sessionBrowserId, name, JSON.stringify(result));
