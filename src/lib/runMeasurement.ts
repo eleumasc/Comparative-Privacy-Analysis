@@ -278,12 +278,12 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     if (!tf1BCtx) {
       return null;
     }
-    assert(tf1BCtx.origin === contextOrigin);
+    assert(tf1BCtx.origin === contextOrigin, `${tf1BCtx.origin} must be equal to ${contextOrigin}`);
     const tf2ACtx = contextSelector(tf2ACtxSet);
     if (!tf2ACtx) {
       return null;
     }
-    assert(tf2ACtx.origin === contextOrigin);
+    assert(tf2ACtx.origin === contextOrigin,  `${tf2ACtx.origin} must be equal to ${contextOrigin}`);
 
     const tf1ACookies = tf1ACtx.cookies;
     const tf1BCookies = tf1BCtx.cookies;
@@ -354,7 +354,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
       if (!ctxs.every((ctx): ctx is NonNullable<typeof ctx> => ctx !== null)) {
         return null;
       }
-      assert(ctxs.every((ctx) => ctx.origin === contextOrigin));
+      assert(ctxs.every((ctx) => ctx.origin === contextOrigin),  `all ${JSON.stringify(ctxs.map(ctx => ctx.origin))} must be equal to ${contextOrigin}`);
 
       return mergeAggregateReports(
         ctxs.flatMap(({ frames }) => {
