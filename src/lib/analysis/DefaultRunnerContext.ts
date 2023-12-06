@@ -43,8 +43,10 @@ export class DefaultRunnerContext implements RunnerContext {
       const name = `${sessionName}${runId}`;
       const result = await sessionController.runAnalysis(url);
       if (result.status === "success") {
+        console.log(`success ${siteIndex}: ${site} [${sessionName}]`);
         logResult(name, result);
       } else {
+        console.log(`failure ${siteIndex}: ${site} [${sessionName}]`);
         throw new Error(`failure ${name}`);
       }
     };
