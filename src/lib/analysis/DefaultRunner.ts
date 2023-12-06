@@ -111,13 +111,13 @@ export class DefaultRunner implements Runner {
         ];
       }
 
-      // await Promise.all(
-      //   lastUsedSessionEntries
-      //     .filter(
-      //       (sessionStatus) => !usedSessionEntries.includes(sessionStatus)
-      //     )
-      //     .map((sessionEntry) => sessionEntry.controller.terminate())
-      // );
+      await Promise.all(
+        lastUsedSessionEntries
+          .filter(
+            (sessionStatus) => !usedSessionEntries.includes(sessionStatus)
+          )
+          .map((sessionEntry) => sessionEntry.controller.terminate())
+      );
 
       await Promise.all(runningProcesses);
 

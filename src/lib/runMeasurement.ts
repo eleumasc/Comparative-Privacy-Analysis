@@ -2,7 +2,7 @@ import assert from "assert";
 import { Config } from "./Config";
 import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
 import { Flow, equalsFlow, getFrameFlows } from "./measurement/Flow";
-import { BrowserId, SiteAnalysisData } from "./measurement/SiteAnalysisData";
+import { SiteAnalysisData } from "./measurement/SiteAnalysisData";
 import {
   AnalysisDetail,
   Cookie,
@@ -15,6 +15,7 @@ import { distinct, mapSequentialAsync } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
 import path from "path";
+import { BrowserId } from "./BrowserId";
 
 interface SiteReport {
   firstPartyContext: SiteContextReport;
@@ -155,23 +156,23 @@ export const runMeasurement = async (config: Config) => {
   ) as SitesEntry[];
 
   const totalCount = sitesEntries.length;
-  const successSitesEntries = sitesEntries.filter(
-    (sitesEntry) => sitesEntry.failureError === null
-  );
-  const successCount = successSitesEntries.length;
-  const navigationErrorCount = sitesEntries.filter(
-    (sitesEntry) => sitesEntry.failureError === "NavigationError"
-  ).length;
-  const successRate = successCount / (totalCount - navigationErrorCount);
+  // // const successSitesEntries = sitesEntries.filter(
+  // //   (sitesEntry) => sitesEntry.failureError === null
+  // // );
+  // // const successCount = successSitesEntries.length;
+  // // const navigationErrorCount = sitesEntries.filter(
+  // //   (sitesEntry) => sitesEntry.failureError === "NavigationError"
+  // // ).length;
+  // const successRate = successCount / (totalCount - navigationErrorCount);
 
-  const slicedSuccessSitesEntries =
-    sliceEnd !== null
-      ? successSitesEntries.slice(0, sliceEnd)
-      : successSitesEntries;
+  // const slicedSuccessSitesEntries =
+  //   sliceEnd !== null
+  //     ? successSitesEntries.slice(0, sliceEnd)
+  //     : successSitesEntries;
 
   const siteReports = (
     await mapSequentialAsync(
-      slicedSuccessSitesEntries,
+      [], // slicedSuccessSitesEntries,
       async (siteEntry, siteIndex) => {
         const { site } = siteEntry;
         try {
@@ -187,11 +188,11 @@ export const runMeasurement = async (config: Config) => {
 
   console.log(
     JSON.stringify({
-      totalCount: totalCount,
-      successCount: successCount,
-      navigationErrorCount: navigationErrorCount,
-      successRate: successRate,
-      siteReports: siteReports.length,
+      // totalCount: totalCount,
+      // successCount: successCount,
+      // navigationErrorCount: navigationErrorCount,
+      // successRate: successRate,
+      // siteReports: siteReports.length,
       globalReport: getGlobalReport(siteReports),
     })
   );
@@ -278,12 +279,18 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     if (!tf1BCtx) {
       return null;
     }
-    assert(tf1BCtx.origin === contextOrigin, `${tf1BCtx.origin} must be equal to ${contextOrigin}`);
+    assert(
+      tf1BCtx.origin === contextOrigin,
+      `${tf1BCtx.origin} must be equal to ${contextOrigin}`
+    );
     const tf2ACtx = contextSelector(tf2ACtxSet);
     if (!tf2ACtx) {
       return null;
     }
-    assert(tf2ACtx.origin === contextOrigin,  `${tf2ACtx.origin} must be equal to ${contextOrigin}`);
+    assert(
+      tf2ACtx.origin === contextOrigin,
+      `${tf2ACtx.origin} must be equal to ${contextOrigin}`
+    );
 
     const tf1ACookies = tf1ACtx.cookies;
     const tf1BCookies = tf1BCtx.cookies;
@@ -354,7 +361,12 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
       if (!ctxs.every((ctx): ctx is NonNullable<typeof ctx> => ctx !== null)) {
         return null;
       }
-      assert(ctxs.every((ctx) => ctx.origin === contextOrigin),  `all ${JSON.stringify(ctxs.map(ctx => ctx.origin))} must be equal to ${contextOrigin}`);
+      assert(
+        ctxs.every((ctx) => ctx.origin === contextOrigin),
+        `all ${JSON.stringify(
+          ctxs.map((ctx) => ctx.origin)
+        )} must be equal to ${contextOrigin}`
+      );
 
       return mergeAggregateReports(
         ctxs.flatMap(({ frames }) => {

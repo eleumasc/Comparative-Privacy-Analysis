@@ -102,11 +102,7 @@ export class ChromiumSession implements Session {
       const detail = await process(page);
       return { status: "success", detail };
     } catch (e) {
-      const reason = String(e);
-      if (reason.includes("net::ERR_BLOCKED_BY_CLIENT")) {
-        return { status: "success", detail: { requests: [], frames: [] } };
-      }
-      return { status: "failure", reason };
+      return { status: "failure", reason: String(e) };
     } finally {
       await page.close();
     }
