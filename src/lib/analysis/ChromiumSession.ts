@@ -79,7 +79,7 @@ export class ChromiumSession implements Session {
 
       await page.setViewport({ width: 1280, height: 720 });
 
-      await page.goto(url, { timeout: 30_000 });
+      await page.goto(url, { timeout: 60_000 });
       await asyncDelay(5_000);
 
       let frames: model.Frame[] = [];
