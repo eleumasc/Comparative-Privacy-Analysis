@@ -21,6 +21,8 @@ export class FailureAwareSessionController implements SessionController {
       lastResult = await this.controller.runAnalysis(url);
       if (lastResult.status === "success") {
         return lastResult;
+      } else {
+        await this.terminate();
       }
     }
     return lastResult!;
