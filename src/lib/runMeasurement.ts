@@ -15,74 +15,117 @@ import { distinct, mapSequentialAsync } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
 import path from "path";
-import { unionSet } from "./util/set";
 
 interface SiteReport {
+  firstPartyContext: SiteContextReport;
+  thirdPartyContext: SiteContextReport;
+}
+
+interface SiteContextReport {
+  general: SiteGeneralReport;
+  tfAggregate: SiteAggregateReport;
+  ffAggregate: SiteAggregateReport;
+  fxAggregate: SiteAggregateReport;
+  brAggregate: SiteAggregateReport;
+  bxAggregate: SiteAggregateReport;
+}
+
+interface SiteGeneralReport {
+  // cookies
   cookies: number;
   trkCookies: number;
-  // xsTrkCookies: number; // distinct tracking cookie keys that we observe in a 3rd-party context
   cookieFlows: number;
   labeledCookieFlows: number;
   trkCookieFlows: number;
-
+  // storageItems
   storageItems: number;
   trkStorageItems: number;
+  storageItemFlows: number;
   trkStorageItemFlows: number;
-
-  tfAggregateReport: SiteAggregateReport;
-
-  ffAggregateReport: SiteAggregateReport;
-  fxAggregateReport: SiteAggregateReport;
-  brAggregateReport: SiteAggregateReport;
-  bxAggregateReport: SiteAggregateReport;
 }
 
 interface SiteAggregateReport {
+  // trkFlows
   trkFlows: Flow[];
-  intnSameSiteTrkFlows: Flow[];
+  pureSameSiteTrkFlows: Flow[];
   xdomSameSiteTrkFlows: Flow[];
+  // trackers
   trackers: string[];
-  intnSameSiteTrackers: string[];
+  pureSameSiteTrackers: string[];
   xdomSameSiteTrackers: string[];
-
-  // xsTrkFlows: number; // distinct flows from tracking cookie/storageItem that we observe in a 3rd-party context
+  // crossSite...
+  crossSiteTrkFlows: Flow[];
+  crossSiteCookies: string[];
 }
 
 interface GlobalReport {
+  firstPartyGeneral: GlobalGeneralReport;
+  thirdPartyGeneral: GlobalGeneralReport;
+  tfFirstPartyAggregate: GlobalAggregateReport;
+  tfThirdPartyAggregate: GlobalAggregateReport;
+  ffFirstPartyAggregate: GlobalAggregateReport;
+  ffThirdPartyAggregate: GlobalAggregateReport;
+  fxFirstPartyAggregate: GlobalAggregateReport;
+  fxThirdPartyAggregate: GlobalAggregateReport;
+  brFirstPartyAggregate: GlobalAggregateReport;
+  brThirdPartyAggregate: GlobalAggregateReport;
+  bxFirstPartyAggregate: GlobalAggregateReport;
+  bxThirdPartyAggregate: GlobalAggregateReport;
+}
+
+interface GlobalGeneralReport {
+  // cookies
   cookies: number;
   cookieDomains: number;
   trkCookies: number;
   trkCookieDomains: number;
   cookieFlows: number;
+  cookieFlowDomains: number;
   labeledCookieFlows: number;
+  labeledCookieFlowDomains: number;
   trkCookieFlows: number;
   trkCookieFlowDomains: number;
-
+  // storageItems
   storageItems: number;
   storageItemDomains: number;
   trkStorageItems: number;
   trkStorageItemDomains: number;
+  storageItemFlows: number;
+  storageItemFlowDomains: number;
   trkStorageItemFlows: number;
   trkStorageItemFlowDomains: number;
-
-  tfAggregateReport: GlobalAggregateReport;
-
-  ffAggregateReport: GlobalAggregateReport;
-  fxAggregateReport: GlobalAggregateReport;
-  brAggregateReport: GlobalAggregateReport;
-  bxAggregateReport: GlobalAggregateReport;
+  // cssis
+  cssis: number;
+  cssiDomains: number;
+  trkCssis: number;
+  trkCssiDomains: number;
+  cssiFlows: number;
+  cssiFlowDomains: number;
+  trkCssiFlows: number;
+  trkCssiFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
+  // trkFlows
   trkFlows: number;
   trkFlowDomains: number;
-  intnSameSiteTrkFlows: number;
+  pureSameSiteTrkFlows: number;
+  pureSameSiteTrkFlowDomains: number;
   xdomSameSiteTrkFlows: number;
+  xdomSameSiteTrkFlowDomains: number;
+  // trackers
   trackers: number;
   trackerDomains: number;
-  intnSameSiteTrackers: string[];
-  xdomSameSiteTrackers: string[];
+  pureSameSiteTrackers: number;
+  pureSameSiteTrackerDomains: number;
+  xdomSameSiteTrackers: number;
+  xdomSameSiteTrackerDomains: number;
   trackerRanking: TrackerRankingEntry[];
+  // crossSite...
+  crossSiteTrkFlows: number;
+  crossSiteTrkFlowDomains: number;
+  crossSiteCookies: number;
+  crossSiteCookieDomains: number;
 }
 
 interface TrackerRankingEntry {
@@ -157,22 +200,6 @@ export const runMeasurement = async (config: Config) => {
 const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
   console.log(siteIndex, data.site);
 
-  const tf1A = data.select({
-    browserId: "foxhound",
-    index: 1,
-    runId: "A",
-  })[0];
-  const tf1B = data.select({
-    browserId: "foxhound",
-    index: 1,
-    runId: "B",
-  })[0];
-  const tf2A = data.select({
-    browserId: "foxhound",
-    index: 2,
-    runId: "A",
-  })[0];
-
   interface ContextFrame {
     frame: Frame;
     requests: Request[];
@@ -212,212 +239,391 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     };
   };
 
-  const tf1ACtxSet = getContextSet(tf1A);
-  const tf1BCtxSet = getContextSet(tf1B);
-  const tf2ACtxSet = getContextSet(tf2A);
-
-  const tf1ACtx = tf1ACtxSet.firstPartyContext;
-  const tf1BCtx = tf1BCtxSet.firstPartyContext;
-  assert(tf1BCtx.origin === tf1ACtx.origin);
-  const tf2ACtx = tf2ACtxSet.firstPartyContext;
-  assert(tf2ACtx.origin === tf1ACtx.origin);
-
-  const tf1ACookies = tf1ACtx.cookies;
-  const tf1BCookies = tf1BCtx.cookies;
-  const tf2ACookies = tf2ACtx.cookies;
-  const cookieKeys = distinct(
-    [...tf1ACookies, ...tf1BCookies].map(({ key }) => key)
+  const tf1ACtxSet = getContextSet(
+    data.select({
+      browserId: "foxhound",
+      index: 1,
+      runId: "A",
+    })[0]
   );
-  const trkCookieKeys = distinct(
-    cookieSwapPartyHeuristics(tf1ACookies, tf1BCookies, tf2ACookies, true)
+  const tf1BCtxSet = getContextSet(
+    data.select({
+      browserId: "foxhound",
+      index: 1,
+      runId: "B",
+    })[0]
   );
-  const tf1AStorageItems = tf1ACtx.storageItems;
-  const tf1BStorageItems = tf1BCtx.storageItems;
-  const tf2AStorageItems = tf2ACtx.storageItems;
-  const storageItemKeys = distinct(
-    [...tf1AStorageItems, ...tf1BStorageItems].map(({ key }) => key)
-  );
-  const trkStorageItemKeys = distinct(
-    cookieSwapPartyHeuristics(
-      tf1AStorageItems,
-      tf1BStorageItems,
-      tf2AStorageItems
-    )
+  const tf2ACtxSet = getContextSet(
+    data.select({
+      browserId: "foxhound",
+      index: 2,
+      runId: "A",
+    })[0]
   );
 
-  const originSite = getSiteFromHostname(new URL(tf1ACtx.origin).hostname);
-  const flows = distinct(
-    [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(({ frame }) =>
-      getFrameFlows(frame)
-    ),
-    equalsFlow
-  ).filter((flow) => flow.targetSite !== originSite); // consider just cross-site flows
-
-  const cookieFlows = flows.filter((flow) => flow.source === "cookie");
-  const labeledCookieFlows = cookieFlows.filter(
-    (flow) => flow.sourceKeys.length > 0
-  ); // NOTE: labeledCookieFlows.length / cookieFlows.length gives the "effectiveness" percentage of "cookie assignment" heuristics
-  const trkCookieFlows = labeledCookieFlows.filter((flow) =>
-    flow.sourceKeys.some((key) => trkCookieKeys.includes(key))
+  const firstPartySite = getSiteFromHostname(
+    new URL(tf1ACtxSet.firstPartyContext.origin).hostname
   );
 
-  const trkStorageItemFlows = flows
-    .filter((flow) => flow.source === "storageItem")
-    .filter((flow) =>
-      flow.sourceKeys.some((key) => trkStorageItemKeys.includes(key))
+  const processContext = (
+    contextSelector: (contextSet: ContextSet) => Context | null,
+    isThirdPartyContext?: boolean
+  ): SiteContextReport | null => {
+    const tf1ACtx = contextSelector(tf1ACtxSet);
+    if (!tf1ACtx) {
+      return null;
+    }
+    const contextOrigin = tf1ACtx.origin;
+    const tf1BCtx = contextSelector(tf1BCtxSet);
+    if (!tf1BCtx) {
+      return null;
+    }
+    assert(tf1BCtx.origin === contextOrigin);
+    const tf2ACtx = contextSelector(tf2ACtxSet);
+    if (!tf2ACtx) {
+      return null;
+    }
+    assert(tf2ACtx.origin === contextOrigin);
+
+    const tf1ACookies = tf1ACtx.cookies;
+    const tf1BCookies = tf1BCtx.cookies;
+    const tf2ACookies = tf2ACtx.cookies;
+    const cookieKeys = distinct(
+      [...tf1ACookies, ...tf1BCookies].map(({ key }) => key)
     );
-
-  const trkFlows = [...trkCookieFlows, ...trkStorageItemFlows];
-
-  const selectRequestsByFrameId = (
-    requests: Request[],
-    frameId: string
-  ): Request[] => {
-    return requests.filter((request) => request.frameId === frameId);
-  };
-
-  const requests = [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(
-    ({ requests }) => requests
-  );
-  const tfAggregateReport = getSiteAggregateReport(trkFlows, requests);
-
-  const compareBrowser = (
-    browserId: BrowserId,
-    index: number
-  ): SiteAggregateReport => {
-    const details = data.select({ browserId, index });
-    const frames = details.map((detail) => detail.frames[0]);
-    assert(
-      frames.every(
-        (frame): frame is NonNullable<typeof frame> =>
-          typeof frame !== "undefined"
+    const trkCookieKeys = distinct(
+      cookieSwapPartyHeuristics(tf1ACookies, tf1BCookies, tf2ACookies, true)
+    );
+    const tf1AStorageItems = tf1ACtx.storageItems;
+    const tf1BStorageItems = tf1BCtx.storageItems;
+    const tf2AStorageItems = tf2ACtx.storageItems;
+    const storageItemKeys = distinct(
+      [...tf1AStorageItems, ...tf1BStorageItems].map(({ key }) => key)
+    );
+    const trkStorageItemKeys = distinct(
+      cookieSwapPartyHeuristics(
+        tf1AStorageItems,
+        tf1BStorageItems,
+        tf2AStorageItems
       )
     );
-    const cookieKeys = distinct(
-      frames.flatMap((frame) => frame.cookies.map(({ key }) => key))
-    );
-    const storageItemKeys = distinct(
-      frames.flatMap((frame) => frame.storageItems.map(({ key }) => key))
-    );
-    const thatRequests = details.flatMap((detail) =>
-      selectRequestsByFrameId(detail.requests, detail.frames[0].frameId)
-    );
-    const targetSites = thatRequests.map((request) =>
-      getSiteFromHostname(new URL(request.url).hostname)
-    );
-    const includedScripts = distinct(
-      thatRequests
-        .filter((request) => request.resourceType === "script")
-        .map((request) => {
-          const scriptURL = new URL(request.url);
-          return scriptURL.origin + scriptURL.pathname;
-        })
-    );
-    const thatTrkFlows = trkFlows.filter(
-      (flow) =>
-        flow.sourceKeys.some((key) => {
-          const keys = flow.source === "cookie" ? cookieKeys : storageItemKeys;
-          return keys.includes(key);
-        }) &&
-        targetSites.includes(flow.targetSite) &&
-        includedScripts.includes(flow.sinkScriptUrl)
-    );
-    return getSiteAggregateReport(thatTrkFlows, thatRequests);
-  };
 
-  const getAggregateReportForOtherBrowser = (
-    browserId: BrowserId
-  ): SiteAggregateReport => {
-    const aggregateReports = [
-      compareBrowser(browserId, 1),
-      compareBrowser(browserId, 2),
-      compareBrowser(browserId, 3),
-      compareBrowser(browserId, 4),
-      compareBrowser(browserId, 5),
-    ];
-    return aggregateReports.reduce(
-      (acc, cur) => {
-        return {
-          trkFlows: unionSet(acc.trkFlows, cur.trkFlows, null),
-          intnSameSiteTrkFlows: unionSet(
-            acc.intnSameSiteTrkFlows,
-            cur.intnSameSiteTrkFlows,
-            null
-          ),
-          xdomSameSiteTrkFlows: unionSet(
-            acc.xdomSameSiteTrkFlows,
-            cur.xdomSameSiteTrkFlows,
-            null
-          ),
-          trackers: unionSet(acc.trackers, cur.trackers, null),
-          intnSameSiteTrackers: unionSet(
-            acc.intnSameSiteTrackers,
-            cur.intnSameSiteTrackers,
-            null
-          ),
-          xdomSameSiteTrackers: unionSet(
-            acc.xdomSameSiteTrackers,
-            cur.xdomSameSiteTrackers,
-            null
-          ),
-        };
-      },
-      {
-        trkFlows: [],
-        intnSameSiteTrkFlows: [],
-        xdomSameSiteTrkFlows: [],
-        trackers: [],
-        intnSameSiteTrackers: [],
-        xdomSameSiteTrackers: [],
+    const flows = distinct(
+      [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(({ frame }) =>
+        getFrameFlows(frame)
+      ),
+      equalsFlow
+    ).filter((flow) => flow.targetSite !== firstPartySite); // consider just cross-site flows
+
+    const cookieFlows = flows.filter((flow) => flow.source === "cookie");
+    const labeledCookieFlows = cookieFlows.filter(
+      (flow) => flow.sourceKeys.length > 0
+    ); // labeledCookieFlows.length / cookieFlows.length gives the "effectiveness" percentage of "cookie assignment" heuristics
+    const trkCookieFlows = labeledCookieFlows.filter((flow) =>
+      flow.sourceKeys.some((key) => trkCookieKeys.includes(key))
+    );
+
+    const storageItemFlows = flows.filter(
+      (flow) => flow.source === "storageItem"
+    );
+    const trkStorageItemFlows = flows
+      .filter((flow) => flow.source === "storageItem")
+      .filter((flow) =>
+        flow.sourceKeys.some((key) => trkStorageItemKeys.includes(key))
+      );
+
+    const trkFlows = [...trkCookieFlows, ...trkStorageItemFlows];
+
+    const requests = [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(
+      ({ requests }) => requests
+    );
+    const tfAggregate = getSiteAggregateReport(
+      trkFlows,
+      requests,
+      getNotPartitionedStorage(isThirdPartyContext ?? false, "foxhound")
+    );
+
+    const compareBrowser = (
+      browserId: BrowserId,
+      index: number
+    ): SiteAggregateReport | null => {
+      const ctxs = data
+        .select({ browserId, index })
+        .map((detail) => getContextSet(detail))
+        .map((ctxSet) => contextSelector(ctxSet));
+      if (!ctxs.every((ctx): ctx is NonNullable<typeof ctx> => ctx !== null)) {
+        return null;
       }
-    );
-  };
+      assert(ctxs.every((ctx) => ctx.origin === contextOrigin));
 
-  const ffAggregateReport = getAggregateReportForOtherBrowser("firefox");
-  const fxAggregateReport = getAggregateReportForOtherBrowser("firefox-nops");
-  const brAggregateReport = getAggregateReportForOtherBrowser("brave");
-  const bxAggregateReport = getAggregateReportForOtherBrowser("brave-aggr");
+      return mergeAggregateReports(
+        ctxs.flatMap(({ frames }) => {
+          return frames.flatMap(({ frame, requests }) => {
+            const cookieKeys = distinct(frame.cookies.map(({ key }) => key));
+
+            const storageItemKeys = distinct(
+              frame.storageItems.map(({ key }) => key)
+            );
+
+            const targetSites = requests.map((request) =>
+              getSiteFromHostname(new URL(request.url).hostname)
+            );
+
+            const includedScripts = distinct(
+              requests
+                .filter((request) => request.resourceType === "script")
+                .map((request) => {
+                  const scriptURL = new URL(request.url);
+                  return scriptURL.origin + scriptURL.pathname;
+                })
+            );
+
+            const matchingTrkFlows = trkFlows.filter(
+              (flow) =>
+                flow.sourceKeys.some((key) => {
+                  const keys =
+                    flow.source === "cookie" ? cookieKeys : storageItemKeys;
+                  return keys.includes(key);
+                }) &&
+                targetSites.includes(flow.targetSite) &&
+                includedScripts.includes(flow.sinkScriptUrl)
+            );
+
+            return getSiteAggregateReport(
+              matchingTrkFlows,
+              requests,
+              getNotPartitionedStorage(isThirdPartyContext ?? false, browserId)
+            );
+          });
+        })
+      );
+    };
+
+    const mergeAggregateReports = (
+      reports: SiteAggregateReport[]
+    ): SiteAggregateReport => {
+      return {
+        trkFlows: distinct(reports.flatMap(({ trkFlows }) => trkFlows)),
+        pureSameSiteTrkFlows: distinct(
+          reports.flatMap(({ pureSameSiteTrkFlows }) => pureSameSiteTrkFlows)
+        ),
+        xdomSameSiteTrkFlows: distinct(
+          reports.flatMap(({ xdomSameSiteTrkFlows }) => xdomSameSiteTrkFlows)
+        ),
+        trackers: distinct(reports.flatMap(({ trackers }) => trackers)),
+        pureSameSiteTrackers: distinct(
+          reports.flatMap(({ pureSameSiteTrackers }) => pureSameSiteTrackers)
+        ),
+        xdomSameSiteTrackers: distinct(
+          reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
+        ),
+        crossSiteTrkFlows: distinct(
+          reports.flatMap(({ crossSiteTrkFlows }) => crossSiteTrkFlows)
+        ),
+        crossSiteCookies: distinct(
+          reports.flatMap(({ crossSiteCookies }) => crossSiteCookies)
+        ),
+      };
+    };
+
+    const getAggregateReportForOtherBrowser = (
+      browserId: BrowserId
+    ): SiteAggregateReport => {
+      return mergeAggregateReports(
+        [
+          compareBrowser(browserId, 1),
+          compareBrowser(browserId, 2),
+          compareBrowser(browserId, 3),
+          compareBrowser(browserId, 4),
+          compareBrowser(browserId, 5),
+        ].filter((x): x is NonNullable<typeof x> => x !== null)
+      );
+    };
+
+    const ffAggregate = getAggregateReportForOtherBrowser("firefox");
+    const fxAggregate = getAggregateReportForOtherBrowser("firefox-nops");
+    const brAggregate = getAggregateReportForOtherBrowser("brave");
+    const bxAggregate = getAggregateReportForOtherBrowser("brave-aggr");
+
+    return {
+      general: {
+        cookies: cookieKeys.length,
+        trkCookies: trkCookieKeys.length,
+        cookieFlows: cookieFlows.length,
+        labeledCookieFlows: labeledCookieFlows.length,
+        trkCookieFlows: trkCookieFlows.length,
+        storageItems: storageItemKeys.length,
+        trkStorageItems: trkStorageItemKeys.length,
+        storageItemFlows: storageItemFlows.length,
+        trkStorageItemFlows: trkStorageItemFlows.length,
+      },
+      tfAggregate,
+      ffAggregate,
+      fxAggregate,
+      brAggregate,
+      bxAggregate,
+    };
+  };
 
   return {
-    cookies: cookieKeys.length, // 1.A
-    trkCookies: trkCookieKeys.length, // 1.B
-    cookieFlows: cookieFlows.length, // 1.C
-    labeledCookieFlows: labeledCookieFlows.length, // 1.D
-    trkCookieFlows: trkCookieFlows.length, // 1.D
-
-    storageItems: storageItemKeys.length, // 2.A
-    trkStorageItems: trkStorageItemKeys.length, // 2.B
-    trkStorageItemFlows: trkStorageItemFlows.length, // 2.C
-
-    tfAggregateReport, // 3.A, ..., 3.F
-
-    ffAggregateReport,
-    fxAggregateReport,
-    brAggregateReport,
-    bxAggregateReport,
+    firstPartyContext: processContext((ctxSet) => ctxSet.firstPartyContext)!,
+    thirdPartyContext: combineSiteContextReports(
+      tf1ACtxSet.thirdPartyContexts
+        .map((ctx) =>
+          processContext(
+            (ctxSet) =>
+              ctxSet.thirdPartyContexts.find(
+                (matchingCtx) => ctx.origin === matchingCtx.origin
+              ) ?? null,
+            true
+          )
+        )
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+    ),
   };
+};
+
+const combineSiteGeneralReports = (
+  reports: SiteGeneralReport[]
+): SiteGeneralReport => {
+  const cookies = sum(reports.map(({ cookies }) => cookies));
+  const trkCookies = sum(reports.map(({ trkCookies }) => trkCookies));
+  const cookieFlows = sum(reports.map(({ cookieFlows }) => cookieFlows));
+  const labeledCookieFlows = sum(
+    reports.map(({ labeledCookieFlows }) => labeledCookieFlows)
+  );
+  const trkCookieFlows = sum(
+    reports.map(({ trkCookieFlows }) => trkCookieFlows)
+  );
+  const storageItems = sum(reports.map(({ storageItems }) => storageItems));
+  const trkStorageItems = sum(
+    reports.map(({ trkStorageItems }) => trkStorageItems)
+  );
+  const storageItemFlows = sum(
+    reports.map(({ storageItemFlows }) => storageItemFlows)
+  );
+  const trkStorageItemFlows = sum(
+    reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
+  );
+  return {
+    cookies,
+    trkCookies,
+    cookieFlows,
+    labeledCookieFlows,
+    trkCookieFlows,
+    storageItems,
+    trkStorageItems,
+    storageItemFlows,
+    trkStorageItemFlows,
+  };
+};
+
+const combineSiteAggregateReports = (
+  reports: SiteAggregateReport[]
+): SiteAggregateReport => {
+  const trkFlows = reports.flatMap(({ trkFlows }) => trkFlows);
+  const pureSameSiteTrkFlows = reports.flatMap(
+    ({ pureSameSiteTrkFlows }) => pureSameSiteTrkFlows
+  );
+  const xdomSameSiteTrkFlows = reports.flatMap(
+    ({ xdomSameSiteTrkFlows }) => xdomSameSiteTrkFlows
+  );
+  const trackers = distinct(reports.flatMap(({ trackers }) => trackers));
+  const pureSameSiteTrackers = distinct(
+    reports.flatMap(({ pureSameSiteTrackers }) => pureSameSiteTrackers)
+  );
+  const xdomSameSiteTrackers = distinct(
+    reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
+  );
+  const crossSiteTrkFlows = reports.flatMap(
+    ({ crossSiteTrkFlows }) => crossSiteTrkFlows
+  );
+  const crossSiteCookies = reports.flatMap(
+    ({ crossSiteCookies }) => crossSiteCookies
+  );
+
+  return {
+    trkFlows,
+    pureSameSiteTrkFlows,
+    xdomSameSiteTrkFlows,
+    trackers,
+    pureSameSiteTrackers,
+    xdomSameSiteTrackers,
+    crossSiteTrkFlows,
+    crossSiteCookies,
+  };
+};
+
+const combineSiteContextReports = (
+  reports: SiteContextReport[]
+): SiteContextReport => {
+  return {
+    general: combineSiteGeneralReports(reports.map(({ general }) => general)),
+    tfAggregate: combineSiteAggregateReports(
+      reports.map(({ tfAggregate }) => tfAggregate)
+    ),
+    ffAggregate: combineSiteAggregateReports(
+      reports.map(({ ffAggregate }) => ffAggregate)
+    ),
+    fxAggregate: combineSiteAggregateReports(
+      reports.map(({ fxAggregate }) => fxAggregate)
+    ),
+    brAggregate: combineSiteAggregateReports(
+      reports.map(({ brAggregate }) => brAggregate)
+    ),
+    bxAggregate: combineSiteAggregateReports(
+      reports.map(({ bxAggregate }) => bxAggregate)
+    ),
+  };
+};
+
+const getNotPartitionedStorage = (
+  isThirdPartyContext: boolean,
+  browserId: BrowserId
+): boolean | undefined => {
+  if (!isThirdPartyContext) {
+    return undefined;
+  }
+  switch (browserId) {
+    case "foxhound":
+    case "firefox-nops":
+      return true;
+    case "firefox":
+    case "brave":
+    case "brave-aggr":
+      return false;
+  }
 };
 
 const getSiteAggregateReport = (
   trkFlows: Flow[],
-  requests: Request[]
+  requests: Request[],
+  notPartitionedStorage?: boolean // boolean in a third-party context, undefined otherwise
 ): SiteAggregateReport => {
   const allowedTargetSites = distinct(
     requests
       .filter((request) => request.resourceType === "script")
       .map((request) => getSiteFromHostname(new URL(request.url).hostname))
   );
-  const intnSameSiteTrkFlows = trkFlows.filter((flow) =>
-    allowedTargetSites.includes(flow.targetSite)
-  );
-  const xdomSameSiteTrkFlows = trkFlows.filter(
-    (flow) => !allowedTargetSites.includes(flow.targetSite)
-  );
+  let pureSameSiteTrkFlows: Flow[] = [];
+  let xdomSameSiteTrkFlows: Flow[] = [];
+  let crossSiteTrkFlows: Flow[] = [];
+  if (typeof notPartitionedStorage !== "undefined" && notPartitionedStorage) {
+    crossSiteTrkFlows = trkFlows;
+  } else {
+    for (const flow of trkFlows) {
+      if (allowedTargetSites.includes(flow.targetSite)) {
+        pureSameSiteTrkFlows = [...pureSameSiteTrkFlows, flow];
+      } else {
+        xdomSameSiteTrkFlows = [...xdomSameSiteTrkFlows, flow];
+      }
+    }
+  }
 
   const trackers = distinct(trkFlows.map((flow) => flow.targetSite));
 
-  const intnSameSiteTrackers = distinct(
-    intnSameSiteTrkFlows.map((flow) => flow.targetSite)
+  const pureSameSiteTrackers = distinct(
+    pureSameSiteTrkFlows.map((flow) => flow.targetSite)
   );
   const xdomSameSiteTrackers = distinct(
     xdomSameSiteTrkFlows.map((flow) => flow.targetSite)
@@ -425,174 +631,226 @@ const getSiteAggregateReport = (
 
   return {
     trkFlows,
-    intnSameSiteTrkFlows,
+    pureSameSiteTrkFlows,
     xdomSameSiteTrkFlows,
     trackers,
-    intnSameSiteTrackers,
+    pureSameSiteTrackers,
     xdomSameSiteTrackers,
+    crossSiteTrkFlows,
+    crossSiteCookies: [], // TODO: implement
   };
 };
 
-const getGlobalReport = (siteReports: SiteReport[]): GlobalReport => {
-  const globalAggregateReportBase: GlobalAggregateReport = {
-    trkFlows: 0,
-    trkFlowDomains: 0,
-    intnSameSiteTrkFlows: 0,
-    xdomSameSiteTrkFlows: 0,
-    trackers: 0,
-    trackerDomains: 0,
-    intnSameSiteTrackers: [],
-    xdomSameSiteTrackers: [],
-    trackerRanking: [],
-  };
-  const createReduceGlobalAggregateReport = (
-    siteAggregateReports: SiteAggregateReport[]
-  ) => {
-    const trackers = distinct(
-      siteAggregateReports.flatMap(
-        (siteAggregateReport) => siteAggregateReport.trackers
-      )
+const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
+  const getGlobalGeneralReport = (
+    reports: SiteGeneralReport[]
+  ): GlobalGeneralReport => {
+    const [cookies, cookieDomains] = bothSumCount(
+      reports.map((report) => report.cookies)
     );
-    const intnSameSiteTrackers = distinct(
-      siteAggregateReports.flatMap(
-        (siteAggregateReport) => siteAggregateReport.intnSameSiteTrackers
-      )
+    const [trkCookies, trkCookieDomains] = bothSumCount(
+      reports.map((report) => report.trkCookies)
     );
-    const xdomSameSiteTrackers = distinct(
-      siteAggregateReports.flatMap(
-        (siteAggregateReport) => siteAggregateReport.xdomSameSiteTrackers
-      )
+    const [cookieFlows, cookieFlowDomains] = bothSumCount(
+      reports.map((report) => report.cookieFlows)
     );
-    const trackerRanking = rankTrackers(siteAggregateReports);
+    const [labeledCookieFlows, labeledCookieFlowDomains] = bothSumCount(
+      reports.map((report) => report.labeledCookieFlows)
+    );
+    const [trkCookieFlows, trkCookieFlowDomains] = bothSumCount(
+      reports.map((report) => report.trkCookieFlows)
+    );
 
-    return (
-      acc: GlobalAggregateReport,
-      cur: SiteAggregateReport
-    ): GlobalAggregateReport => {
-      return {
-        trkFlows: acc.trkFlows + cur.trkFlows.length,
-        trkFlowDomains: acc.trkFlowDomains + (cur.trkFlows.length > 0 ? 1 : 0),
-        intnSameSiteTrkFlows:
-          acc.intnSameSiteTrkFlows + cur.intnSameSiteTrkFlows.length,
-        xdomSameSiteTrkFlows:
-          acc.xdomSameSiteTrkFlows + cur.xdomSameSiteTrkFlows.length,
-        trackers: trackers.length,
-        trackerDomains: acc.trackerDomains + (cur.trackers.length > 0 ? 1 : 0),
-        intnSameSiteTrackers: intnSameSiteTrackers,
-        xdomSameSiteTrackers: xdomSameSiteTrackers,
-        trackerRanking,
-      };
+    const [storageItems, storageItemDomains] = bothSumCount(
+      reports.map((report) => report.storageItems)
+    );
+    const [trkStorageItems, trkStorageItemDomains] = bothSumCount(
+      reports.map((report) => report.trkStorageItems)
+    );
+    const [storageItemFlows, storageItemFlowDomains] = bothSumCount(
+      reports.map((report) => report.storageItemFlows)
+    );
+    const [trkStorageItemFlows, trkStorageItemFlowDomains] = bothSumCount(
+      reports.map((report) => report.trkStorageItemFlows)
+    );
+
+    const [cssis, cssiDomains] = bothSumCount(
+      reports.map((report) => report.cookies + report.storageItems)
+    );
+    const [trkCssis, trkCssiDomains] = bothSumCount(
+      reports.map((report) => report.trkCookies + report.trkStorageItems)
+    );
+    const [cssiFlows, cssiFlowDomains] = bothSumCount(
+      reports.map((report) => report.cookieFlows + report.storageItemFlows)
+    );
+    const [trkCssiFlows, trkCssiFlowDomains] = bothSumCount(
+      reports.map(
+        (report) => report.trkCookieFlows + report.trkStorageItemFlows
+      )
+    );
+
+    return {
+      // cookies
+      cookies,
+      cookieDomains,
+      trkCookies,
+      trkCookieDomains,
+      cookieFlows,
+      cookieFlowDomains,
+      labeledCookieFlows,
+      labeledCookieFlowDomains,
+      trkCookieFlows,
+      trkCookieFlowDomains,
+      // storageItems
+      storageItems,
+      storageItemDomains,
+      trkStorageItems,
+      trkStorageItemDomains,
+      storageItemFlows,
+      storageItemFlowDomains,
+      trkStorageItemFlows,
+      trkStorageItemFlowDomains,
+      // cssis
+      cssis,
+      cssiDomains,
+      trkCssis,
+      trkCssiDomains,
+      cssiFlows,
+      cssiFlowDomains,
+      trkCssiFlows,
+      trkCssiFlowDomains,
     };
   };
 
-  const tfReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
-    siteReports.map(({ tfAggregateReport }) => tfAggregateReport)
-  );
+  const getGlobalAggregateReport = (
+    reports: SiteAggregateReport[]
+  ): GlobalAggregateReport => {
+    const [trkFlows, trkFlowDomains] = bothSumCount(
+      reports.map((report) => report.trkFlows.length)
+    );
+    const [pureSameSiteTrkFlows, pureSameSiteTrkFlowDomains] = bothSumCount(
+      reports.map((report) => report.pureSameSiteTrkFlows.length)
+    );
+    const [xdomSameSiteTrkFlows, xdomSameSiteTrkFlowDomains] = bothSumCount(
+      reports.map((report) => report.xdomSameSiteTrkFlows.length)
+    );
 
-  const ffReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
-    siteReports.map(({ ffAggregateReport }) => ffAggregateReport)
-  );
-  const fxReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
-    siteReports.map(({ fxAggregateReport }) => fxAggregateReport)
-  );
-  const brReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
-    siteReports.map(({ brAggregateReport }) => brAggregateReport)
-  );
-  const bxReduceGlobalAggregateReport = createReduceGlobalAggregateReport(
-    siteReports.map(({ bxAggregateReport }) => bxAggregateReport)
-  );
+    const trackers = distinct(
+      reports.flatMap((report) => report.trackers)
+    ).length;
+    const trackerDomains = count(
+      reports.map((report) => report.trackers.length)
+    );
+    const pureSameSiteTrackers = distinct(
+      reports.flatMap((report) => report.pureSameSiteTrackers)
+    ).length;
+    const pureSameSiteTrackerDomains = count(
+      reports.map((report) => report.pureSameSiteTrackers.length)
+    );
+    const xdomSameSiteTrackers = distinct(
+      reports.flatMap((report) => report.xdomSameSiteTrackers)
+    ).length;
+    const xdomSameSiteTrackerDomains = count(
+      reports.map((report) => report.xdomSameSiteTrackers.length)
+    );
 
-  return siteReports.reduce<GlobalReport>(
-    (acc, cur) => {
-      return {
-        cookies: acc.cookies + cur.cookies,
-        cookieDomains: acc.cookieDomains + (cur.cookies > 0 ? 1 : 0),
-        trkCookies: acc.trkCookies + cur.trkCookies,
-        trkCookieDomains: acc.trkCookieDomains + (cur.trkCookies > 0 ? 1 : 0),
-        cookieFlows: acc.cookieFlows + cur.cookieFlows,
-        labeledCookieFlows: acc.labeledCookieFlows + cur.labeledCookieFlows,
-        trkCookieFlows: acc.trkCookieFlows + cur.trkCookieFlows,
-        trkCookieFlowDomains:
-          acc.trkCookieFlowDomains + (cur.trkCookieFlows > 0 ? 1 : 0),
+    const rankTrackers = (
+      reports: SiteAggregateReport[]
+    ): TrackerRankingEntry[] => {
+      const popularityMap = reports.reduce((map, report) => {
+        for (const tracker of report.trackers) {
+          const currentPopularity = map.get(tracker) ?? 0;
+          map.set(tracker, currentPopularity + 1);
+        }
+        return map;
+      }, new Map<string, number>());
 
-        storageItems: acc.storageItems + cur.storageItems,
-        storageItemDomains:
-          acc.storageItemDomains + (cur.storageItems > 0 ? 1 : 0),
-        trkStorageItems: acc.trkStorageItems + cur.trkStorageItems,
-        trkStorageItemDomains:
-          acc.trkStorageItemDomains + (cur.trkStorageItems > 0 ? 1 : 0),
-        trkStorageItemFlows: acc.trkStorageItemFlows + cur.trkStorageItemFlows,
-        trkStorageItemFlowDomains:
-          acc.trkStorageItemFlowDomains + (cur.trkStorageItemFlows > 0 ? 1 : 0),
+      return [...popularityMap.entries()]
+        .map(([tracker, popularity]): TrackerRankingEntry => {
+          return { tracker, popularity };
+        })
+        .sort((a, b) => -(a.popularity - b.popularity))
+        .filter(({ popularity }) => popularity > 1);
+    };
+    const trackerRanking = rankTrackers(reports);
 
-        tfAggregateReport: tfReduceGlobalAggregateReport(
-          acc.tfAggregateReport,
-          cur.tfAggregateReport
-        ),
+    const [crossSiteTrkFlows, crossSiteTrkFlowDomains] = bothSumCount(
+      reports.map((report) => report.crossSiteTrkFlows.length)
+    );
+    const [crossSiteCookies, crossSiteCookieDomains] = bothSumCount(
+      reports.map((report) => report.crossSiteCookies.length)
+    );
 
-        ffAggregateReport: ffReduceGlobalAggregateReport(
-          acc.ffAggregateReport,
-          cur.ffAggregateReport
-        ),
-        fxAggregateReport: fxReduceGlobalAggregateReport(
-          acc.fxAggregateReport,
-          cur.fxAggregateReport
-        ),
-        brAggregateReport: brReduceGlobalAggregateReport(
-          acc.brAggregateReport,
-          cur.brAggregateReport
-        ),
-        bxAggregateReport: bxReduceGlobalAggregateReport(
-          acc.bxAggregateReport,
-          cur.bxAggregateReport
-        ),
-      };
-    },
-    {
-      cookies: 0,
-      cookieDomains: 0,
-      trkCookies: 0,
-      trkCookieDomains: 0,
-      cookieFlows: 0,
-      labeledCookieFlows: 0,
-      trkCookieFlows: 0,
-      trkCookieFlowDomains: 0,
+    return {
+      // trkFlows
+      trkFlows,
+      trkFlowDomains,
+      pureSameSiteTrkFlows,
+      pureSameSiteTrkFlowDomains,
+      xdomSameSiteTrkFlows,
+      xdomSameSiteTrkFlowDomains,
+      // trackers
+      trackers,
+      trackerDomains,
+      pureSameSiteTrackers,
+      pureSameSiteTrackerDomains,
+      xdomSameSiteTrackers,
+      xdomSameSiteTrackerDomains,
+      trackerRanking,
+      // crossSite...
+      crossSiteTrkFlows,
+      crossSiteTrkFlowDomains,
+      crossSiteCookies,
+      crossSiteCookieDomains,
+    };
+  };
 
-      storageItems: 0,
-      storageItemDomains: 0,
-      trkStorageItems: 0,
-      trkStorageItemDomains: 0,
-      trkStorageItemFlows: 0,
-      trkStorageItemFlowDomains: 0,
-
-      tfAggregateReport: globalAggregateReportBase,
-
-      ffAggregateReport: globalAggregateReportBase,
-      fxAggregateReport: globalAggregateReportBase,
-      brAggregateReport: globalAggregateReportBase,
-      bxAggregateReport: globalAggregateReportBase,
-    }
-  );
+  return {
+    firstPartyGeneral: getGlobalGeneralReport(
+      reports.map((report) => report.firstPartyContext.general)
+    ),
+    thirdPartyGeneral: getGlobalGeneralReport(
+      reports.map((report) => report.thirdPartyContext.general)
+    ),
+    tfFirstPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.firstPartyContext.tfAggregate)
+    ),
+    tfThirdPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.thirdPartyContext.tfAggregate)
+    ),
+    ffFirstPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.firstPartyContext.ffAggregate)
+    ),
+    ffThirdPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.thirdPartyContext.ffAggregate)
+    ),
+    fxFirstPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.firstPartyContext.fxAggregate)
+    ),
+    fxThirdPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.thirdPartyContext.fxAggregate)
+    ),
+    brFirstPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.firstPartyContext.brAggregate)
+    ),
+    brThirdPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.thirdPartyContext.brAggregate)
+    ),
+    bxFirstPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.firstPartyContext.bxAggregate)
+    ),
+    bxThirdPartyAggregate: getGlobalAggregateReport(
+      reports.map((report) => report.thirdPartyContext.bxAggregate)
+    ),
+  };
 };
 
-const rankTrackers = (
-  siteAggregateReports: SiteAggregateReport[]
-): TrackerRankingEntry[] => {
-  const popularityMap = siteAggregateReports.reduce(
-    (map, siteAggregateReport) => {
-      for (const tracker of siteAggregateReport.trackers) {
-        const currentPopularity = map.get(tracker) ?? 0;
-        map.set(tracker, currentPopularity + 1);
-      }
-      return map;
-    },
-    new Map<string, number>()
-  );
-
-  return [...popularityMap.entries()]
-    .map(
-      ([tracker, popularity]): TrackerRankingEntry => ({ tracker, popularity })
-    )
-    .sort((a, b) => -(a.popularity - b.popularity))
-    .filter(({ popularity }) => popularity > 1);
+const sum = (values: number[]): number => {
+  return values.reduce((acc, value) => acc + value, 0);
+};
+const count = (values: number[]): number => {
+  return values.reduce((acc, value) => acc + (value > 0 ? 1 : 0), 0);
+};
+const bothSumCount = (values: number[]): [number, number] => {
+  return [sum(values), count(values)];
 };
