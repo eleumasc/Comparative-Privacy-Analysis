@@ -230,7 +230,7 @@ const useNetworkLogging = async (tabId, callback) => {
 
 const runAnalysis = async ({ url, isFoxhound }) => {
   const process = async (tabId, networkLoggingState) => {
-    await timeBomb(navigate(tabId, url), 30_000);
+    await timeBomb(navigate(tabId, url), 60_000);
     await asyncDelay(5_000);
 
     const frames = (

@@ -16,7 +16,7 @@ import { DefaultRunner } from "./analysis/DefaultRunner";
 import { SiteEntry } from "./analysis/Runner";
 import { DefaultRunnerContext } from "./analysis/DefaultRunnerContext";
 
-const DEFAULT_SESSION_TIMEOUT = 60_000;
+const DEFAULT_SESSION_TIMEOUT = 75_000;
 const DEFAULT_SESSION_MAX_ATTEMPTS = 3;
 
 const DEFAULT_CONCURRENCY_LEVEL = 6;
