@@ -43,10 +43,10 @@ export class DefaultSessionController implements SessionController {
 
   async terminate(force?: boolean): Promise<void> {
     const session = this.session;
-    this.session = null;
     if (session) {
       await session.terminate(force);
       await asyncDelay(1_000);
     }
+    this.session = null;
   }
 }
