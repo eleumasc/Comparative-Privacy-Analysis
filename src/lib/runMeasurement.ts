@@ -215,8 +215,8 @@ export const runMeasurement = async (config: Config) => {
   console.log(
     JSON.stringify({
       totalDomains,
-      tfSuccessDomains,
       tfNavigationErrorDomains,
+      tfSuccessDomains,
       tfSuccessRate,
       ffSuccessDomains,
       ffSuccessRate,
