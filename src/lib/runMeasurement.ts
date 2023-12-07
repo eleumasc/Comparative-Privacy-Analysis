@@ -17,7 +17,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { BrowserId } from "./BrowserId";
 import { isNonNullable } from "./util/types";
-import { sum, count, bothSumCount } from "./util/stats";
+import { sum, countIfNonZero, bothSumCount } from "./util/stats";
 
 interface SiteReport {
   firstPartyContext: SiteContextReport;
@@ -56,6 +56,8 @@ interface SiteAggregateReport {
   trackers: string[];
   pureSameSiteTrackers: string[];
   xdomSameSiteTrackers: string[];
+  // misc
+  trkCookies: string[];
 }
 
 interface GlobalReport {
@@ -122,6 +124,8 @@ interface GlobalAggregateReport {
   xdomSameSiteTrackers: number;
   xdomSameSiteTrackerDomains: number;
   trackerRanking: TrackerRankingEntry[];
+  // misc
+  eitherTrkFlowOrTrkCookieDomains: number;
 }
 
 interface TrackerRankingEntry {
@@ -371,7 +375,11 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     const requests = [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(
       ({ requests }) => requests
     );
-    const tfAggregate = getSiteAggregateReport(trkFlows, requests);
+    const tfAggregate = getSiteAggregateReport(
+      trkCookieKeys,
+      trkFlows,
+      requests
+    );
 
     const compareBrowser = (browserId: BrowserId): SiteAggregateReport => {
       const ctxs = data
@@ -389,9 +397,12 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
         )} must be equal to ${contextOrigin}`
       );
 
-      const reports = ctxs.flatMap(({ frames }) => {
-        return frames.flatMap(({ frame, requests }) => {
+      const reports = ctxs.flatMap(({ frames }) =>
+        frames.flatMap(({ frame, requests }) => {
           const cookieKeys = distinct(frame.cookies.map(({ key }) => key));
+          const matchingTrkCookieKeys = trkCookieKeys.filter((key) =>
+            cookieKeys.includes(key)
+          );
 
           const storageItemKeys = distinct(
             frame.storageItems.map(({ key }) => key)
@@ -421,9 +432,13 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
               includedScripts.includes(flow.sinkScriptUrl)
           );
 
-          return getSiteAggregateReport(matchingTrkFlows, requests);
-        });
-      });
+          return getSiteAggregateReport(
+            matchingTrkCookieKeys,
+            matchingTrkFlows,
+            requests
+          );
+        })
+      );
 
       return combineSiteAggregateReportsSameOrigin(reports);
     };
@@ -488,6 +503,7 @@ const combineSiteAggregateReportsSameOrigin = (
     xdomSameSiteTrackers: distinct(
       reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
     ),
+    trkCookies: distinct(reports.flatMap(({ trkCookies }) => trkCookies)),
   };
 };
 
@@ -531,6 +547,7 @@ const combineSiteAggregateReports = (
     xdomSameSiteTrackers: distinct(
       reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
     ),
+    trkCookies: reports.flatMap(({ trkCookies }) => trkCookies),
   };
 };
 
@@ -558,6 +575,7 @@ const combineSiteContextReports = (
 };
 
 const getSiteAggregateReport = (
+  trkCookies: string[],
   trkFlows: Flow[],
   requests: Request[]
 ): SiteAggregateReport => {
@@ -586,6 +604,7 @@ const getSiteAggregateReport = (
   );
 
   return {
+    trkCookies,
     trkFlows,
     pureSameSiteTrkFlows,
     xdomSameSiteTrkFlows,
@@ -692,19 +711,19 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     const trackers = distinct(
       reports.flatMap((report) => report.trackers)
     ).length;
-    const trackerDomains = count(
+    const trackerDomains = countIfNonZero(
       reports.map((report) => report.trackers.length)
     );
     const pureSameSiteTrackers = distinct(
       reports.flatMap((report) => report.pureSameSiteTrackers)
     ).length;
-    const pureSameSiteTrackerDomains = count(
+    const pureSameSiteTrackerDomains = countIfNonZero(
       reports.map((report) => report.pureSameSiteTrackers.length)
     );
     const xdomSameSiteTrackers = distinct(
       reports.flatMap((report) => report.xdomSameSiteTrackers)
     ).length;
-    const xdomSameSiteTrackerDomains = count(
+    const xdomSameSiteTrackerDomains = countIfNonZero(
       reports.map((report) => report.xdomSameSiteTrackers.length)
     );
 
@@ -728,6 +747,10 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     };
     const trackerRanking = rankTrackers(reports);
 
+    const eitherTrkFlowOrTrkCookieDomains = countIfNonZero(
+      reports.map((report) => report.trkFlows.length + report.trkCookies.length)
+    );
+
     return {
       // trkFlows
       trkFlows,
@@ -744,6 +767,8 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       xdomSameSiteTrackers,
       xdomSameSiteTrackerDomains,
       trackerRanking,
+      // misc
+      eitherTrkFlowOrTrkCookieDomains,
     };
   };
 
