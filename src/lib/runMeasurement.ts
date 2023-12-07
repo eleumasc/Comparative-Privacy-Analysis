@@ -49,6 +49,8 @@ interface SiteGeneralReport {
   trkStorageItems: number;
   storageItemFlows: number;
   trkStorageItemFlows: number;
+  // misc
+  ga: number;
 }
 
 interface SiteAggregateReport {
@@ -110,6 +112,8 @@ interface GlobalGeneralReport {
   cssiFlowDomains: number;
   trkCssiFlows: number;
   trkCssiFlowDomains: number;
+  // misc
+  gaDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -529,6 +533,13 @@ const processSite = (
         trkStorageItems: trkStorageItemKeys.length,
         storageItemFlows: storageItemFlows.length,
         trkStorageItemFlows: trkStorageItemFlows.length,
+        ga:
+          trkCookieKeys.includes("_gid") ||
+          trkCookieKeys.includes("_ga") ||
+          trkStorageItemKeys.includes("_gid") ||
+          trkStorageItemKeys.includes("_ga")
+            ? 1
+            : 0,
       },
       tfAggregate,
       ffAggregate,
@@ -596,6 +607,7 @@ const combineSiteGeneralReports = (
     trkStorageItemFlows: sum(
       reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
     ),
+    ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
   };
 };
 
@@ -732,6 +744,8 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       )
     );
 
+    const gaDomains = countIfNonZero(reports.map((report) => report.ga));
+
     return {
       // cookies
       cookies,
@@ -762,6 +776,8 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       cssiFlowDomains,
       trkCssiFlows,
       trkCssiFlowDomains,
+      // misc
+      gaDomains,
     };
   };
 
