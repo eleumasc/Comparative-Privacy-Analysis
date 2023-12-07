@@ -460,9 +460,6 @@ const processSite = (
         .map((detail) => getContextSet(detail))
         .map((ctxSet) => contextSelector(ctxSet))
         .filter(isNonNullable);
-      if (ctxs.length === 0) {
-        return combineSiteAggregateReportsSameOrigin([]);
-      }
       assert(
         ctxs.every((ctx) => ctx.origin === contextOrigin),
         `all ${JSON.stringify(
