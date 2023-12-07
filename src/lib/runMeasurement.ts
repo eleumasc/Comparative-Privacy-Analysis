@@ -16,6 +16,8 @@ import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
 import path from "path";
 import { BrowserId } from "./BrowserId";
+import { isNonNullable } from "./util/types";
+import { sum, count, bothSumCount } from "./util/stats";
 
 interface SiteReport {
   firstPartyContext: SiteContextReport;
@@ -54,9 +56,6 @@ interface SiteAggregateReport {
   trackers: string[];
   pureSameSiteTrackers: string[];
   xdomSameSiteTrackers: string[];
-  // crossSite...
-  crossSiteTrkFlows: Flow[];
-  crossSiteCookies: string[];
 }
 
 interface GlobalReport {
@@ -122,11 +121,6 @@ interface GlobalAggregateReport {
   xdomSameSiteTrackers: number;
   xdomSameSiteTrackerDomains: number;
   trackerRanking: TrackerRankingEntry[];
-  // crossSite...
-  crossSiteTrkFlows: number;
-  crossSiteTrkFlowDomains: number;
-  crossSiteCookies: number;
-  crossSiteCookieDomains: number;
 }
 
 interface TrackerRankingEntry {
@@ -154,29 +148,54 @@ export const runMeasurement = async (config: Config) => {
   const sitesEntries = JSON.parse(
     (await readFile(path.join(outputPath, "sites.json"))).toString()
   ) as SitesEntry[];
+  const tfSuccessSitesEntries = sitesEntries.filter(
+    (sitesEntry) =>
+      sitesEntry.failureErrorEntries.find(
+        (entry) => entry.browserId === "foxhound"
+      )!.failureError === null
+  );
+  const tfSlicedSuccessSitesEntries =
+    sliceEnd !== null
+      ? tfSuccessSitesEntries.slice(0, sliceEnd)
+      : tfSuccessSitesEntries;
 
   const totalCount = sitesEntries.length;
-  // // const successSitesEntries = sitesEntries.filter(
-  // //   (sitesEntry) => sitesEntry.failureError === null
-  // // );
-  // // const successCount = successSitesEntries.length;
-  // // const navigationErrorCount = sitesEntries.filter(
-  // //   (sitesEntry) => sitesEntry.failureError === "NavigationError"
-  // // ).length;
-  // const successRate = successCount / (totalCount - navigationErrorCount);
+  const tfSuccessCount = tfSuccessSitesEntries.length;
+  const tfNavigationErrorCount = sitesEntries.filter(
+    (sitesEntry) =>
+      sitesEntry.failureErrorEntries.find(
+        (entry) => entry.browserId === "foxhound"
+      )!.failureError === "NavigationError"
+  ).length;
+  const tfSuccessRate = tfSuccessCount / (totalCount - tfNavigationErrorCount);
 
-  // const slicedSuccessSitesEntries =
-  //   sliceEnd !== null
-  //     ? successSitesEntries.slice(0, sliceEnd)
-  //     : successSitesEntries;
+  const getOtherBrowserBothSuccessCountRate = (
+    browserId: BrowserId
+  ): [number, number] => {
+    const successCount = sitesEntries.filter(
+      (sitesEntry) =>
+        sitesEntry.failureErrorEntries.find(
+          (entry) => entry.browserId === browserId
+        )!.failureError === null
+    ).length;
+    const successRate = successCount / tfSuccessCount;
+    return [successCount, successRate];
+  };
+  const [ffSuccessCount, ffSuccessRate] =
+    getOtherBrowserBothSuccessCountRate("firefox");
+  const [fxSuccessCount, fxSuccessRate] =
+    getOtherBrowserBothSuccessCountRate("firefox-nops");
+  const [brSuccessCount, brSuccessRate] =
+    getOtherBrowserBothSuccessCountRate("brave");
+  const [bxSuccessCount, bxSuccessRate] =
+    getOtherBrowserBothSuccessCountRate("brave-aggr");
 
   const siteReports = (
     await mapSequentialAsync(
-      [], // slicedSuccessSitesEntries,
+      tfSlicedSuccessSitesEntries,
       async (siteEntry, siteIndex) => {
-        const { site } = siteEntry;
         try {
-          const data = await SiteAnalysisData.fromFile(outputPath, site);
+          const data = await SiteAnalysisData.fromFile(outputPath, siteEntry);
           return processSite(data, siteIndex);
         } catch (e) {
           console.log(e);
@@ -184,15 +203,23 @@ export const runMeasurement = async (config: Config) => {
         }
       }
     )
-  ).filter((x): x is NonNullable<typeof x> => x !== null);
+  ).filter(isNonNullable);
 
   console.log(
     JSON.stringify({
-      // totalCount: totalCount,
-      // successCount: successCount,
-      // navigationErrorCount: navigationErrorCount,
-      // successRate: successRate,
-      // siteReports: siteReports.length,
+      totalCount: totalCount,
+      tfSuccessCount,
+      tfNavigationErrorCount,
+      tfSuccessRate,
+      ffSuccessCount,
+      ffSuccessRate,
+      fxSuccessCount,
+      fxSuccessRate,
+      brSuccessCount,
+      brSuccessRate,
+      bxSuccessCount,
+      bxSuccessRate,
+      siteReports: siteReports.length,
       globalReport: getGlobalReport(siteReports),
     })
   );
@@ -267,16 +294,15 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
   );
 
   const processContext = (
-    contextSelector: (contextSet: ContextSet) => Context | null,
-    isThirdPartyContext?: boolean
+    contextSelector: (contextSet: ContextSet) => Context | null
   ): SiteContextReport | null => {
     const tf1ACtx = contextSelector(tf1ACtxSet);
-    if (!tf1ACtx) {
+    if (!isNonNullable(tf1ACtx)) {
       return null;
     }
     const contextOrigin = tf1ACtx.origin;
     const tf1BCtx = contextSelector(tf1BCtxSet);
-    if (!tf1BCtx) {
+    if (!isNonNullable(tf1BCtx)) {
       return null;
     }
     assert(
@@ -284,7 +310,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
       `${tf1BCtx.origin} must be equal to ${contextOrigin}`
     );
     const tf2ACtx = contextSelector(tf2ACtxSet);
-    if (!tf2ACtx) {
+    if (!isNonNullable(tf2ACtx)) {
       return null;
     }
     assert(
@@ -344,11 +370,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     const requests = [...tf1ACtx.frames, ...tf1BCtx.frames].flatMap(
       ({ requests }) => requests
     );
-    const tfAggregate = getSiteAggregateReport(
-      trkFlows,
-      requests,
-      getNotPartitionedStorage(isThirdPartyContext ?? false, "foxhound")
-    );
+    const tfAggregate = getSiteAggregateReport(trkFlows, requests);
 
     const compareBrowser = (
       browserId: BrowserId,
@@ -358,7 +380,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
         .select({ browserId, index })
         .map((detail) => getContextSet(detail))
         .map((ctxSet) => contextSelector(ctxSet));
-      if (!ctxs.every((ctx): ctx is NonNullable<typeof ctx> => ctx !== null)) {
+      if (!ctxs.every(isNonNullable)) {
         return null;
       }
       assert(
@@ -401,11 +423,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
                 includedScripts.includes(flow.sinkScriptUrl)
             );
 
-            return getSiteAggregateReport(
-              matchingTrkFlows,
-              requests,
-              getNotPartitionedStorage(isThirdPartyContext ?? false, browserId)
-            );
+            return getSiteAggregateReport(matchingTrkFlows, requests);
           });
         })
       );
@@ -429,12 +447,6 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
         xdomSameSiteTrackers: distinct(
           reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
         ),
-        crossSiteTrkFlows: distinct(
-          reports.flatMap(({ crossSiteTrkFlows }) => crossSiteTrkFlows)
-        ),
-        crossSiteCookies: distinct(
-          reports.flatMap(({ crossSiteCookies }) => crossSiteCookies)
-        ),
       };
     };
 
@@ -448,7 +460,7 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
           compareBrowser(browserId, 3),
           compareBrowser(browserId, 4),
           compareBrowser(browserId, 5),
-        ].filter((x): x is NonNullable<typeof x> => x !== null)
+        ].filter(isNonNullable)
       );
     };
 
@@ -486,11 +498,10 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
             (ctxSet) =>
               ctxSet.thirdPartyContexts.find(
                 (matchingCtx) => ctx.origin === matchingCtx.origin
-              ) ?? null,
-            true
+              ) ?? null
           )
         )
-        .filter((x): x is NonNullable<typeof x> => x !== null)
+        .filter(isNonNullable)
     ),
   };
 };
@@ -547,12 +558,6 @@ const combineSiteAggregateReports = (
   const xdomSameSiteTrackers = distinct(
     reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
   );
-  const crossSiteTrkFlows = reports.flatMap(
-    ({ crossSiteTrkFlows }) => crossSiteTrkFlows
-  );
-  const crossSiteCookies = reports.flatMap(
-    ({ crossSiteCookies }) => crossSiteCookies
-  );
 
   return {
     trkFlows,
@@ -561,8 +566,6 @@ const combineSiteAggregateReports = (
     trackers,
     pureSameSiteTrackers,
     xdomSameSiteTrackers,
-    crossSiteTrkFlows,
-    crossSiteCookies,
   };
 };
 
@@ -589,28 +592,9 @@ const combineSiteContextReports = (
   };
 };
 
-const getNotPartitionedStorage = (
-  isThirdPartyContext: boolean,
-  browserId: BrowserId
-): boolean | undefined => {
-  if (!isThirdPartyContext) {
-    return undefined;
-  }
-  switch (browserId) {
-    case "foxhound":
-    case "firefox-nops":
-      return true;
-    case "firefox":
-    case "brave":
-    case "brave-aggr":
-      return false;
-  }
-};
-
 const getSiteAggregateReport = (
   trkFlows: Flow[],
-  requests: Request[],
-  notPartitionedStorage?: boolean // boolean in a third-party context, undefined otherwise
+  requests: Request[]
 ): SiteAggregateReport => {
   const allowedTargetSites = distinct(
     requests
@@ -619,16 +603,11 @@ const getSiteAggregateReport = (
   );
   let pureSameSiteTrkFlows: Flow[] = [];
   let xdomSameSiteTrkFlows: Flow[] = [];
-  let crossSiteTrkFlows: Flow[] = [];
-  if (typeof notPartitionedStorage !== "undefined" && notPartitionedStorage) {
-    crossSiteTrkFlows = trkFlows;
-  } else {
-    for (const flow of trkFlows) {
-      if (allowedTargetSites.includes(flow.targetSite)) {
-        pureSameSiteTrkFlows = [...pureSameSiteTrkFlows, flow];
-      } else {
-        xdomSameSiteTrkFlows = [...xdomSameSiteTrkFlows, flow];
-      }
+  for (const flow of trkFlows) {
+    if (allowedTargetSites.includes(flow.targetSite)) {
+      pureSameSiteTrkFlows = [...pureSameSiteTrkFlows, flow];
+    } else {
+      xdomSameSiteTrkFlows = [...xdomSameSiteTrkFlows, flow];
     }
   }
 
@@ -648,8 +627,6 @@ const getSiteAggregateReport = (
     trackers,
     pureSameSiteTrackers,
     xdomSameSiteTrackers,
-    crossSiteTrkFlows,
-    crossSiteCookies: [], // TODO: implement
   };
 };
 
@@ -786,13 +763,6 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     };
     const trackerRanking = rankTrackers(reports);
 
-    const [crossSiteTrkFlows, crossSiteTrkFlowDomains] = bothSumCount(
-      reports.map((report) => report.crossSiteTrkFlows.length)
-    );
-    const [crossSiteCookies, crossSiteCookieDomains] = bothSumCount(
-      reports.map((report) => report.crossSiteCookies.length)
-    );
-
     return {
       // trkFlows
       trkFlows,
@@ -809,11 +779,6 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       xdomSameSiteTrackers,
       xdomSameSiteTrackerDomains,
       trackerRanking,
-      // crossSite...
-      crossSiteTrkFlows,
-      crossSiteTrkFlowDomains,
-      crossSiteCookies,
-      crossSiteCookieDomains,
     };
   };
 
@@ -855,14 +820,4 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       reports.map((report) => report.thirdPartyContext.bxAggregate)
     ),
   };
-};
-
-const sum = (values: number[]): number => {
-  return values.reduce((acc, value) => acc + value, 0);
-};
-const count = (values: number[]): number => {
-  return values.reduce((acc, value) => acc + (value > 0 ? 1 : 0), 0);
-};
-const bothSumCount = (values: number[]): [number, number] => {
-  return [sum(values), count(values)];
 };
