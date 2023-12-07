@@ -159,41 +159,43 @@ export const runMeasurement = async (config: Config) => {
         (entry) => entry.browserId === "foxhound"
       )!.failureError === null
   );
-  const tfSlicedSuccessSitesEntries =
-    sliceEnd !== null
-      ? tfSuccessSitesEntries.slice(0, sliceEnd)
-      : tfSuccessSitesEntries;
 
-  const totalCount = sitesEntries.length;
-  const tfSuccessCount = tfSuccessSitesEntries.length;
-  const tfNavigationErrorCount = sitesEntries.filter(
+  const totalDomains = sitesEntries.length;
+  const tfNavigationErrorDomains = sitesEntries.filter(
     (sitesEntry) =>
       sitesEntry.failureErrorEntries.find(
         (entry) => entry.browserId === "foxhound"
       )!.failureError === "NavigationError"
   ).length;
-  const tfSuccessRate = tfSuccessCount / (totalCount - tfNavigationErrorCount);
+  const tfSuccessDomains = tfSuccessSitesEntries.length;
+  const tfSuccessRate =
+    tfSuccessDomains / (totalDomains - tfNavigationErrorDomains);
 
-  const getOtherBrowserBothSuccessCountRate = (
+  const bothOtherBrowserSuccessDomainsRate = (
     browserId: BrowserId
   ): [number, number] => {
-    const successCount = sitesEntries.filter(
+    const successDomains = tfSuccessSitesEntries.filter(
       (sitesEntry) =>
         sitesEntry.failureErrorEntries.find(
           (entry) => entry.browserId === browserId
         )!.failureError === null
     ).length;
-    const successRate = successCount / tfSuccessCount;
-    return [successCount, successRate];
+    const successRate = successDomains / tfSuccessDomains;
+    return [successDomains, successRate];
   };
-  const [ffSuccessCount, ffSuccessRate] =
-    getOtherBrowserBothSuccessCountRate("firefox");
-  const [fxSuccessCount, fxSuccessRate] =
-    getOtherBrowserBothSuccessCountRate("firefox-nops");
-  const [brSuccessCount, brSuccessRate] =
-    getOtherBrowserBothSuccessCountRate("brave");
-  const [bxSuccessCount, bxSuccessRate] =
-    getOtherBrowserBothSuccessCountRate("brave-aggr");
+  const [ffSuccessDomains, ffSuccessRate] =
+    bothOtherBrowserSuccessDomainsRate("firefox");
+  const [fxSuccessDomains, fxSuccessRate] =
+    bothOtherBrowserSuccessDomainsRate("firefox-nops");
+  const [brSuccessDomains, brSuccessRate] =
+    bothOtherBrowserSuccessDomainsRate("brave");
+  const [bxSuccessDomains, bxSuccessRate] =
+    bothOtherBrowserSuccessDomainsRate("brave-aggr");
+
+  const tfSlicedSuccessSitesEntries =
+    sliceEnd !== null
+      ? tfSuccessSitesEntries.slice(0, sliceEnd)
+      : tfSuccessSitesEntries;
 
   const siteReports = (
     await mapSequentialAsync(
@@ -212,17 +214,17 @@ export const runMeasurement = async (config: Config) => {
 
   console.log(
     JSON.stringify({
-      totalCount: totalCount,
-      tfSuccessCount,
-      tfNavigationErrorCount,
+      totalDomains,
+      tfSuccessDomains,
+      tfNavigationErrorDomains,
       tfSuccessRate,
-      ffSuccessCount,
+      ffSuccessDomains,
       ffSuccessRate,
-      fxSuccessCount,
+      fxSuccessDomains,
       fxSuccessRate,
-      brSuccessCount,
+      brSuccessDomains,
       brSuccessRate,
-      bxSuccessCount,
+      bxSuccessDomains,
       bxSuccessRate,
       siteReports: siteReports.length,
       globalReport: getGlobalReport(siteReports),
