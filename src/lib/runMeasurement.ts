@@ -59,7 +59,7 @@ interface SiteAggregateReport {
 }
 
 interface GlobalReport {
-  // totalGeneral: GlobalGeneralReport;
+  totalGeneral: GlobalGeneralReport;
   firstPartyGeneral: GlobalGeneralReport;
   thirdPartyGeneral: GlobalGeneralReport;
   tfFirstPartyAggregate: GlobalAggregateReport;
@@ -748,6 +748,14 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
   };
 
   return {
+    totalGeneral: getGlobalGeneralReport(
+      reports.map((report) =>
+        combineSiteGeneralReports([
+          report.firstPartyContext.general,
+          report.thirdPartyContext.general,
+        ])
+      )
+    ),
     firstPartyGeneral: getGlobalGeneralReport(
       reports.map((report) => report.firstPartyContext.general)
     ),
