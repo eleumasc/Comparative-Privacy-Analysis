@@ -165,7 +165,7 @@ const readSitesEntries = async (
 
 export const runMeasurement = async (config: Config) => {
   const outputPaths = (() => {
-    const outputPaths = process.argv.slice(2, process.argv.length - 1);
+    const outputPaths = process.argv.slice(2);
     assert(
       outputPaths.every((outputPath) => typeof outputPath === "string"),
       "all outputPaths must be a string"
