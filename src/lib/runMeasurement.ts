@@ -59,6 +59,7 @@ interface SiteAggregateReport {
 }
 
 interface GlobalReport {
+  // totalGeneral: GlobalGeneralReport;
   firstPartyGeneral: GlobalGeneralReport;
   thirdPartyGeneral: GlobalGeneralReport;
   tfFirstPartyAggregate: GlobalAggregateReport;
@@ -372,16 +373,14 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
     );
     const tfAggregate = getSiteAggregateReport(trkFlows, requests);
 
-    const compareBrowser = (
-      browserId: BrowserId,
-      index: number
-    ): SiteAggregateReport | null => {
+    const compareBrowser = (browserId: BrowserId): SiteAggregateReport => {
       const ctxs = data
-        .select({ browserId, index })
+        .select({ browserId })
         .map((detail) => getContextSet(detail))
-        .map((ctxSet) => contextSelector(ctxSet));
-      if (!ctxs.every(isNonNullable)) {
-        return null;
+        .map((ctxSet) => contextSelector(ctxSet))
+        .filter(isNonNullable);
+      if (ctxs.length === 0) {
+        return combineSiteAggregateReportsSameOrigin([]);
       }
       assert(
         ctxs.every((ctx) => ctx.origin === contextOrigin),
@@ -390,84 +389,49 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
         )} must be equal to ${contextOrigin}`
       );
 
-      return mergeAggregateReports(
-        ctxs.flatMap(({ frames }) => {
-          return frames.flatMap(({ frame, requests }) => {
-            const cookieKeys = distinct(frame.cookies.map(({ key }) => key));
+      const reports = ctxs.flatMap(({ frames }) => {
+        return frames.flatMap(({ frame, requests }) => {
+          const cookieKeys = distinct(frame.cookies.map(({ key }) => key));
 
-            const storageItemKeys = distinct(
-              frame.storageItems.map(({ key }) => key)
-            );
+          const storageItemKeys = distinct(
+            frame.storageItems.map(({ key }) => key)
+          );
 
-            const targetSites = requests.map((request) =>
-              getSiteFromHostname(new URL(request.url).hostname)
-            );
+          const targetSites = requests.map((request) =>
+            getSiteFromHostname(new URL(request.url).hostname)
+          );
 
-            const includedScripts = distinct(
-              requests
-                .filter((request) => request.resourceType === "script")
-                .map((request) => {
-                  const scriptURL = new URL(request.url);
-                  return scriptURL.origin + scriptURL.pathname;
-                })
-            );
+          const includedScripts = distinct(
+            requests
+              .filter((request) => request.resourceType === "script")
+              .map((request) => {
+                const scriptURL = new URL(request.url);
+                return scriptURL.origin + scriptURL.pathname;
+              })
+          );
 
-            const matchingTrkFlows = trkFlows.filter(
-              (flow) =>
-                flow.sourceKeys.some((key) => {
-                  const keys =
-                    flow.source === "cookie" ? cookieKeys : storageItemKeys;
-                  return keys.includes(key);
-                }) &&
-                targetSites.includes(flow.targetSite) &&
-                includedScripts.includes(flow.sinkScriptUrl)
-            );
+          const matchingTrkFlows = trkFlows.filter(
+            (flow) =>
+              flow.sourceKeys.some((key) => {
+                const keys =
+                  flow.source === "cookie" ? cookieKeys : storageItemKeys;
+                return keys.includes(key);
+              }) &&
+              targetSites.includes(flow.targetSite) &&
+              includedScripts.includes(flow.sinkScriptUrl)
+          );
 
-            return getSiteAggregateReport(matchingTrkFlows, requests);
-          });
-        })
-      );
+          return getSiteAggregateReport(matchingTrkFlows, requests);
+        });
+      });
+
+      return combineSiteAggregateReportsSameOrigin(reports);
     };
 
-    const mergeAggregateReports = (
-      reports: SiteAggregateReport[]
-    ): SiteAggregateReport => {
-      return {
-        trkFlows: distinct(reports.flatMap(({ trkFlows }) => trkFlows)),
-        pureSameSiteTrkFlows: distinct(
-          reports.flatMap(({ pureSameSiteTrkFlows }) => pureSameSiteTrkFlows)
-        ),
-        xdomSameSiteTrkFlows: distinct(
-          reports.flatMap(({ xdomSameSiteTrkFlows }) => xdomSameSiteTrkFlows)
-        ),
-        trackers: distinct(reports.flatMap(({ trackers }) => trackers)),
-        pureSameSiteTrackers: distinct(
-          reports.flatMap(({ pureSameSiteTrackers }) => pureSameSiteTrackers)
-        ),
-        xdomSameSiteTrackers: distinct(
-          reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
-        ),
-      };
-    };
-
-    const getAggregateReportForOtherBrowser = (
-      browserId: BrowserId
-    ): SiteAggregateReport => {
-      return mergeAggregateReports(
-        [
-          compareBrowser(browserId, 1),
-          compareBrowser(browserId, 2),
-          compareBrowser(browserId, 3),
-          compareBrowser(browserId, 4),
-          compareBrowser(browserId, 5),
-        ].filter(isNonNullable)
-      );
-    };
-
-    const ffAggregate = getAggregateReportForOtherBrowser("firefox");
-    const fxAggregate = getAggregateReportForOtherBrowser("firefox-nops");
-    const brAggregate = getAggregateReportForOtherBrowser("brave");
-    const bxAggregate = getAggregateReportForOtherBrowser("brave-aggr");
+    const ffAggregate = compareBrowser("firefox");
+    const fxAggregate = compareBrowser("firefox-nops");
+    const brAggregate = compareBrowser("brave");
+    const bxAggregate = compareBrowser("brave-aggr");
 
     return {
       general: {
@@ -506,66 +470,67 @@ const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
   };
 };
 
+const combineSiteAggregateReportsSameOrigin = (
+  reports: SiteAggregateReport[]
+): SiteAggregateReport => {
+  return {
+    trkFlows: distinct(reports.flatMap(({ trkFlows }) => trkFlows)),
+    pureSameSiteTrkFlows: distinct(
+      reports.flatMap(({ pureSameSiteTrkFlows }) => pureSameSiteTrkFlows)
+    ),
+    xdomSameSiteTrkFlows: distinct(
+      reports.flatMap(({ xdomSameSiteTrkFlows }) => xdomSameSiteTrkFlows)
+    ),
+    trackers: distinct(reports.flatMap(({ trackers }) => trackers)),
+    pureSameSiteTrackers: distinct(
+      reports.flatMap(({ pureSameSiteTrackers }) => pureSameSiteTrackers)
+    ),
+    xdomSameSiteTrackers: distinct(
+      reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
+    ),
+  };
+};
+
 const combineSiteGeneralReports = (
   reports: SiteGeneralReport[]
 ): SiteGeneralReport => {
-  const cookies = sum(reports.map(({ cookies }) => cookies));
-  const trkCookies = sum(reports.map(({ trkCookies }) => trkCookies));
-  const cookieFlows = sum(reports.map(({ cookieFlows }) => cookieFlows));
-  const labeledCookieFlows = sum(
-    reports.map(({ labeledCookieFlows }) => labeledCookieFlows)
-  );
-  const trkCookieFlows = sum(
-    reports.map(({ trkCookieFlows }) => trkCookieFlows)
-  );
-  const storageItems = sum(reports.map(({ storageItems }) => storageItems));
-  const trkStorageItems = sum(
-    reports.map(({ trkStorageItems }) => trkStorageItems)
-  );
-  const storageItemFlows = sum(
-    reports.map(({ storageItemFlows }) => storageItemFlows)
-  );
-  const trkStorageItemFlows = sum(
-    reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
-  );
   return {
-    cookies,
-    trkCookies,
-    cookieFlows,
-    labeledCookieFlows,
-    trkCookieFlows,
-    storageItems,
-    trkStorageItems,
-    storageItemFlows,
-    trkStorageItemFlows,
+    cookies: sum(reports.map(({ cookies }) => cookies)),
+    trkCookies: sum(reports.map(({ trkCookies }) => trkCookies)),
+    cookieFlows: sum(reports.map(({ cookieFlows }) => cookieFlows)),
+    labeledCookieFlows: sum(
+      reports.map(({ labeledCookieFlows }) => labeledCookieFlows)
+    ),
+    trkCookieFlows: sum(reports.map(({ trkCookieFlows }) => trkCookieFlows)),
+    storageItems: sum(reports.map(({ storageItems }) => storageItems)),
+    trkStorageItems: sum(reports.map(({ trkStorageItems }) => trkStorageItems)),
+    storageItemFlows: sum(
+      reports.map(({ storageItemFlows }) => storageItemFlows)
+    ),
+    trkStorageItemFlows: sum(
+      reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
+    ),
   };
 };
 
 const combineSiteAggregateReports = (
   reports: SiteAggregateReport[]
 ): SiteAggregateReport => {
-  const trkFlows = reports.flatMap(({ trkFlows }) => trkFlows);
-  const pureSameSiteTrkFlows = reports.flatMap(
-    ({ pureSameSiteTrkFlows }) => pureSameSiteTrkFlows
-  );
-  const xdomSameSiteTrkFlows = reports.flatMap(
-    ({ xdomSameSiteTrkFlows }) => xdomSameSiteTrkFlows
-  );
-  const trackers = distinct(reports.flatMap(({ trackers }) => trackers));
-  const pureSameSiteTrackers = distinct(
-    reports.flatMap(({ pureSameSiteTrackers }) => pureSameSiteTrackers)
-  );
-  const xdomSameSiteTrackers = distinct(
-    reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
-  );
-
   return {
-    trkFlows,
-    pureSameSiteTrkFlows,
-    xdomSameSiteTrkFlows,
-    trackers,
-    pureSameSiteTrackers,
-    xdomSameSiteTrackers,
+    trkFlows: reports.flatMap(({ trkFlows }) => trkFlows),
+    pureSameSiteTrkFlows: reports.flatMap(
+      ({ pureSameSiteTrkFlows }) => pureSameSiteTrkFlows
+    ),
+    xdomSameSiteTrkFlows: reports.flatMap(
+      ({ xdomSameSiteTrkFlows }) => xdomSameSiteTrkFlows
+    ),
+    trackers: distinct(reports.flatMap(({ trackers }) => trackers)),
+    pureSameSiteTrackers: distinct(
+      reports.flatMap(({ pureSameSiteTrackers }) => pureSameSiteTrackers)
+    ),
+    xdomSameSiteTrackers: distinct(
+      reports.flatMap(({ xdomSameSiteTrackers }) => xdomSameSiteTrackers)
+    ),
   };
 };
 
