@@ -11,13 +11,17 @@ import {
   SitesEntry,
   StorageItem,
 } from "./model";
-import { distinct, mapSequentialAsync } from "./util/array";
+import { distinct, divide, mapSequentialAsync } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
 import path from "path";
 import { BrowserId } from "./BrowserId";
 import { isNonNullable } from "./util/types";
 import { sum, countIfNonZero, bothSumCount } from "./util/stats";
+import { Agent } from "port_agent";
+import { Worker, isMainThread, parentPort } from "worker_threads";
+
+const DEFAULT_CONCURRENCY_LEVEL = 4;
 
 interface SiteReport {
   firstPartyContext: SiteContextReport;
@@ -142,13 +146,15 @@ const readSitesEntries = async (
 ): Promise<ExtendedSitesEntry[]> => {
   let mergedExtendedSitesEntries: ExtendedSitesEntry[] = [];
   for (const outputPath of outputPaths) {
+    const mergedLength = mergedExtendedSitesEntries.length;
     const newExtendedSitesEntries = (
       JSON.parse(
         (await readFile(path.join(outputPath, "sites.json"))).toString()
       ) as SitesEntry[]
-    ).map((sitesEntry: SitesEntry): ExtendedSitesEntry => {
+    ).map((sitesEntry: SitesEntry, index): ExtendedSitesEntry => {
       return {
         ...sitesEntry,
+        siteIndex: mergedLength + index,
         outputPath,
       };
     });
@@ -165,13 +171,23 @@ const readSitesEntries = async (
 
 export const runMeasurement = async (config: Config) => {
   const outputPaths = (() => {
-    const outputPaths = process.argv.slice(2);
+    const values = process.argv.slice(2);
     assert(
-      outputPaths.every((outputPath) => typeof outputPath === "string"),
+      values.every((outputPath) => typeof outputPath === "string"),
       "all outputPaths must be a string"
     );
-    return outputPaths;
+    return values;
   })();
+
+  const concurrencyLevel = (() => {
+    const envValue = process.env["CONCURRENCY_LEVEL"];
+    const value = envValue
+      ? Number.parseInt(envValue)
+      : DEFAULT_CONCURRENCY_LEVEL;
+    assert(!Number.isNaN(value), `CONCURRENCY_LEVEL must be a number`);
+    return value;
+  })();
+  console.log(`Concurrency Level: ${concurrencyLevel}`);
 
   const sitesEntries = await readSitesEntries(outputPaths);
   const tfSuccessSitesEntries = sitesEntries.filter(
@@ -213,23 +229,10 @@ export const runMeasurement = async (config: Config) => {
   const [bxSuccessDomains, bxSuccessRate] =
     bothOtherBrowserSuccessDomainsRate("brave-aggr");
 
-  const siteReports = (
-    await mapSequentialAsync(
-      tfSuccessSitesEntries,
-      async (siteEntry, siteIndex) => {
-        try {
-          const data = await SiteAnalysisData.fromFile(
-            siteEntry.outputPath,
-            siteEntry
-          );
-          return processSite(data, siteIndex);
-        } catch (e) {
-          console.log(e);
-          return null;
-        }
-      }
-    )
-  ).filter(isNonNullable);
+  const siteReports = await getSiteReports(
+    tfSuccessSitesEntries,
+    concurrencyLevel
+  );
 
   console.log(
     JSON.stringify({
@@ -251,8 +254,57 @@ export const runMeasurement = async (config: Config) => {
   );
 };
 
-const processSite = (data: SiteAnalysisData, siteIndex: number): SiteReport => {
-  console.log(siteIndex, data.site);
+const getSiteReports = async (
+  sitesEntries: ExtendedSitesEntry[],
+  concurrencyLevel: number
+) => {
+  const sitesEntriesPerThread = divide(
+    sitesEntries,
+    Math.ceil(sitesEntries.length / concurrencyLevel)
+  );
+
+  return (
+    await Promise.all(
+      sitesEntriesPerThread.map(async (sitesEntries) => {
+        const worker = new Worker(__filename);
+        const agent = new Agent(worker);
+        try {
+          return (await agent.call(
+            processSiteMulti.name,
+            sitesEntries
+          )) as SiteReport[];
+        } finally {
+          worker.terminate();
+        }
+      })
+    )
+  ).flat();
+};
+
+export const processSiteMulti = async (
+  sitesEntries: ExtendedSitesEntry[]
+): Promise<SiteReport[]> => {
+  return (
+    await mapSequentialAsync(sitesEntries, async (sitesEntry) => {
+      try {
+        const data = await SiteAnalysisData.fromFile(
+          sitesEntry.outputPath,
+          sitesEntry
+        );
+        return processSite(data, sitesEntry);
+      } catch (e) {
+        console.log(e);
+        return null;
+      }
+    })
+  ).filter(isNonNullable);
+};
+
+const processSite = (
+  data: SiteAnalysisData,
+  sitesEntry: SitesEntry
+): SiteReport => {
+  console.log(sitesEntry.siteIndex, sitesEntry.site);
 
   interface ContextFrame {
     frame: Frame;
@@ -840,3 +892,16 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     ),
   };
 };
+
+// worker thread
+if (!isMainThread) {
+  if (parentPort) {
+    const agent = new Agent(parentPort);
+
+    agent.register(
+      processSiteMulti.name,
+      (sitesEntries: ExtendedSitesEntry[]): Promise<SiteReport[]> =>
+        processSiteMulti(sitesEntries)
+    );
+  }
+}
