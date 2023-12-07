@@ -133,26 +133,47 @@ interface TrackerRankingEntry {
   popularity: number;
 }
 
+interface ExtendedSitesEntry extends SitesEntry {
+  outputPath: string;
+}
+
+const readSitesEntries = async (
+  outputPaths: string[]
+): Promise<ExtendedSitesEntry[]> => {
+  let mergedExtendedSitesEntries: ExtendedSitesEntry[] = [];
+  for (const outputPath of outputPaths) {
+    const newExtendedSitesEntries = (
+      JSON.parse(
+        (await readFile(path.join(outputPath, "sites.json"))).toString()
+      ) as SitesEntry[]
+    ).map((sitesEntry: SitesEntry): ExtendedSitesEntry => {
+      return {
+        ...sitesEntry,
+        outputPath,
+      };
+    });
+    const sites = newExtendedSitesEntries.map(({ site }) => site);
+    mergedExtendedSitesEntries = [
+      ...mergedExtendedSitesEntries.filter(
+        (extendedSitesEntry) => !sites.includes(extendedSitesEntry.site)
+      ),
+      ...newExtendedSitesEntries,
+    ];
+  }
+  return mergedExtendedSitesEntries;
+};
+
 export const runMeasurement = async (config: Config) => {
-  const outputPath = (() => {
-    const arg = process.argv[2];
-    assert(typeof arg === "string", "outputPath must be a string");
-    return arg;
-  })();
-  const sliceEnd = (() => {
-    const arg = process.argv[3];
-    if (typeof arg !== "undefined") {
-      const num = +arg;
-      assert(!Number.isNaN(num), "sliceEnd must be a number");
-      return num;
-    } else {
-      return undefined;
-    }
+  const outputPaths = (() => {
+    const outputPaths = process.argv.slice(2, process.argv.length - 1);
+    assert(
+      outputPaths.every((outputPath) => typeof outputPath === "string"),
+      "all outputPaths must be a string"
+    );
+    return outputPaths;
   })();
 
-  const sitesEntries = JSON.parse(
-    (await readFile(path.join(outputPath, "sites.json"))).toString()
-  ) as SitesEntry[];
+  const sitesEntries = await readSitesEntries(outputPaths);
   const tfSuccessSitesEntries = sitesEntries.filter(
     (sitesEntry) =>
       sitesEntry.failureErrorEntries.find(
@@ -192,17 +213,15 @@ export const runMeasurement = async (config: Config) => {
   const [bxSuccessDomains, bxSuccessRate] =
     bothOtherBrowserSuccessDomainsRate("brave-aggr");
 
-  const tfSlicedSuccessSitesEntries =
-    sliceEnd !== null
-      ? tfSuccessSitesEntries.slice(0, sliceEnd)
-      : tfSuccessSitesEntries;
-
   const siteReports = (
     await mapSequentialAsync(
-      tfSlicedSuccessSitesEntries,
+      tfSuccessSitesEntries,
       async (siteEntry, siteIndex) => {
         try {
-          const data = await SiteAnalysisData.fromFile(outputPath, siteEntry);
+          const data = await SiteAnalysisData.fromFile(
+            siteEntry.outputPath,
+            siteEntry
+          );
           return processSite(data, siteIndex);
         } catch (e) {
           console.log(e);
