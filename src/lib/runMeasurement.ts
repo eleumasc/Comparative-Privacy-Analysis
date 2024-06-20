@@ -24,6 +24,7 @@ import { Worker, isMainThread, parentPort } from "worker_threads";
 const DEFAULT_CONCURRENCY_LEVEL = 4;
 
 interface SiteReport {
+  site: string;
   firstPartyContext: SiteContextReport;
   thirdPartyContext: SiteContextReport;
 }
@@ -80,6 +81,7 @@ interface GlobalReport {
   brThirdPartyAggregate: GlobalAggregateReport;
   bxFirstPartyAggregate: GlobalAggregateReport;
   bxThirdPartyAggregate: GlobalAggregateReport;
+  sitesWithOnlyFlowTrackers: string[];
 }
 
 interface GlobalGeneralReport {
@@ -555,6 +557,7 @@ const processSite = (
   };
 
   return {
+    site: data.site,
     firstPartyContext: processContext((ctxSet) => ctxSet.firstPartyContext)!,
     thirdPartyContext: combineSiteContextReports(
       tf1ACtxSet.thirdPartyContexts
@@ -879,6 +882,20 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     };
   };
 
+  const getSitesWithOnlyFlowTrackers = (reports: SiteReport[]): string[] => {
+    const trkCookieDomains = reports
+      .filter((report) => report.thirdPartyContext.general.trkCookies > 0)
+      .map(({ site }) => site);
+    const trackerDomainsAll = reports
+      .filter(
+        (report) => report.thirdPartyContext.tfAggregate.trackersAll.length > 0
+      )
+      .map(({ site }) => site);
+    return [...trackerDomainsAll].filter(
+      (site) => !trkCookieDomains.includes(site)
+    );
+  };
+
   return {
     totalGeneral: getGlobalGeneralReport(
       reports.map((report) =>
@@ -924,6 +941,7 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     bxThirdPartyAggregate: getGlobalAggregateReport(
       reports.map((report) => report.thirdPartyContext.bxAggregate)
     ),
+    sitesWithOnlyFlowTrackers: getSitesWithOnlyFlowTrackers(reports),
   };
 };
 
