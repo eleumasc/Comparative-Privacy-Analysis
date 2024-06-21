@@ -1,4 +1,4 @@
-import { KeyValuePair, Cookie, Frame, TaintReport } from "../model";
+import { CSSI, Cookie, Frame, TaintReport } from "../model";
 import { findLCSubstring } from "../util/findLCSubstring";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 
@@ -102,13 +102,13 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
         targetSite,
         sinkScriptUrl,
         exactMatching: sourceKeys.some((sourceKey) => {
-          const pairs: KeyValuePair[] =
+          const cssis: CSSI[] =
             source === "cookie" ? frame.cookies : frame.storageItems;
-          const pair = pairs.find((pair) => pair.key === sourceKey);
-          if (typeof pair === "undefined") {
+          const cssi = cssis.find((cssi) => cssi.key === sourceKey);
+          if (typeof cssi === "undefined") {
             return false;
           }
-          return str.includes(pair.value);
+          return str.includes(cssi.value);
         }),
       };
     };

@@ -83,14 +83,14 @@ export interface Frame {
   taintReports?: TaintReport[];
 }
 
-export interface KeyValuePair {
+export interface CSSI {
   key: string;
   value: string;
 }
 
-export interface Cookie extends KeyValuePair {}
+export interface Cookie extends CSSI {}
 
-export interface StorageItem extends KeyValuePair {}
+export interface StorageItem extends CSSI {}
 
 export interface TaintReport {
   loc: string;
