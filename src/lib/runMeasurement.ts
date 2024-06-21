@@ -52,8 +52,9 @@ interface SiteGeneralReport {
   trkStorageItemFlows: number;
   // ga
   ga: number;
-  // exactMatching
-  exactMatchingFlows: number;
+  // matching
+  notSubstrMatchingTrkFlows: number;
+  notLCSMatchingTrkFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -118,9 +119,11 @@ interface GlobalGeneralReport {
   trkCssiFlowDomains: number;
   // ga
   gaDomains: number;
-  // exactMatching
-  exactMatchingFlows: number;
-  exactMatchingFlowDomains: number;
+  // matching
+  notSubstrMatchingTrkFlows: number;
+  notSubstrMatchingTrkFlowDomains: number;
+  notLCSMatchingTrkFlows: number;
+  notLCSMatchingTrkFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -534,7 +537,11 @@ const processSite = (
     const brAggregate = compareBrowser("brave");
     const bxAggregate = compareBrowser("brave-aggr");
 
-    const exactMatchingFlows = flows.filter((flow) => flow.exactMatching);
+    const notSubstrMatchingTrkFlows = trkFlows.filter(
+      (flow) => !flow.substrMatching
+    );
+
+    const notLCSMatchingTrkFlows = trkFlows.filter((flow) => !flow.lcsMatching);
 
     return {
       general: {
@@ -555,7 +562,8 @@ const processSite = (
             ? 1
             : 0,
 
-        exactMatchingFlows: exactMatchingFlows.length,
+        notSubstrMatchingTrkFlows: notSubstrMatchingTrkFlows.length,
+        notLCSMatchingTrkFlows: notLCSMatchingTrkFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -625,8 +633,11 @@ const combineSiteGeneralReports = (
       reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
     ),
     ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
-    exactMatchingFlows: sum(
-      reports.map(({ exactMatchingFlows }) => exactMatchingFlows)
+    notSubstrMatchingTrkFlows: sum(
+      reports.map(({ notSubstrMatchingTrkFlows }) => notSubstrMatchingTrkFlows)
+    ),
+    notLCSMatchingTrkFlows: sum(
+      reports.map(({ notLCSMatchingTrkFlows }) => notLCSMatchingTrkFlows)
     ),
   };
 };
@@ -772,8 +783,11 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
 
     const gaDomains = countIfNonZero(reports.map((report) => report.ga));
 
-    const [exactMatchingFlows, exactMatchingFlowDomains] = bothSumCount(
-      reports.map((report) => report.exactMatchingFlows)
+    const [notSubstrMatchingTrkFlows, notSubstrMatchingTrkFlowDomains] =
+      bothSumCount(reports.map((report) => report.notSubstrMatchingTrkFlows));
+
+    const [notLCSMatchingTrkFlows, notLCSMatchingTrkFlowDomains] = bothSumCount(
+      reports.map((report) => report.notLCSMatchingTrkFlows)
     );
 
     return {
@@ -808,9 +822,11 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       trkCssiFlowDomains,
       // ga
       gaDomains,
-      // exactMatching
-      exactMatchingFlows,
-      exactMatchingFlowDomains,
+      // matching
+      notSubstrMatchingTrkFlows,
+      notSubstrMatchingTrkFlowDomains,
+      notLCSMatchingTrkFlows,
+      notLCSMatchingTrkFlowDomains,
     };
   };
 

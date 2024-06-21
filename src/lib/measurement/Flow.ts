@@ -8,7 +8,8 @@ export interface Flow {
   sink: string;
   targetSite: string;
   sinkScriptUrl: string;
-  exactMatching: boolean;
+  substrMatching: boolean;
+  lcsMatching: boolean;
 }
 
 export type Source = "cookie" | "storageItem";
@@ -95,21 +96,33 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
     const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
     const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
     const createSingleFlow = (source: Source, sourceKeys: string[]): Flow => {
-      return {
-        source,
-        sourceKeys,
-        sink,
-        targetSite,
-        sinkScriptUrl,
-        exactMatching: sourceKeys.some((sourceKey) => {
+      const matches = (
+        matchFn: (cssiValue: string, sinkStr: string) => boolean
+      ): boolean => {
+        return sourceKeys.some((sourceKey) => {
           const cssis: CSSI[] =
             source === "cookie" ? frame.cookies : frame.storageItems;
           const cssi = cssis.find((cssi) => cssi.key === sourceKey);
           if (typeof cssi === "undefined") {
             return false;
           }
-          return str.includes(cssi.value);
-        }),
+          return matchFn(cssi.value, str);
+        });
+      };
+
+      return {
+        source,
+        sourceKeys,
+        sink,
+        targetSite,
+        sinkScriptUrl,
+        substrMatching: matches((cssiValue, sinkStr) =>
+          sinkStr.includes(cssiValue)
+        ),
+        lcsMatching: matches(
+          (cssiValue, sinkStr) =>
+            findLCSubstring(cssiValue, sinkStr).str.length >= 8
+        ),
       };
     };
 
