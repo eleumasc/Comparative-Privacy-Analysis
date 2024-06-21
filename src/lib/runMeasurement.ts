@@ -52,6 +52,8 @@ interface SiteGeneralReport {
   trkStorageItemFlows: number;
   // ga
   ga: number;
+  // exactMatching
+  exactMatchingFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -116,6 +118,9 @@ interface GlobalGeneralReport {
   trkCssiFlowDomains: number;
   // ga
   gaDomains: number;
+  // exactMatching
+  exactMatchingFlows: number;
+  exactMatchingFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -529,6 +534,8 @@ const processSite = (
     const brAggregate = compareBrowser("brave");
     const bxAggregate = compareBrowser("brave-aggr");
 
+    const exactMatchingFlows = flows.filter((flow) => flow.exactMatching);
+
     return {
       general: {
         cookies: cookieKeys.length,
@@ -547,6 +554,8 @@ const processSite = (
           trkStorageItemKeys.includes("_ga")
             ? 1
             : 0,
+
+        exactMatchingFlows: exactMatchingFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -616,6 +625,9 @@ const combineSiteGeneralReports = (
       reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
     ),
     ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
+    exactMatchingFlows: sum(
+      reports.map(({ exactMatchingFlows }) => exactMatchingFlows)
+    ),
   };
 };
 
@@ -760,6 +772,10 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
 
     const gaDomains = countIfNonZero(reports.map((report) => report.ga));
 
+    const [exactMatchingFlows, exactMatchingFlowDomains] = bothSumCount(
+      reports.map((report) => report.exactMatchingFlows)
+    );
+
     return {
       // cookies
       cookies,
@@ -792,6 +808,9 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       trkCssiFlowDomains,
       // ga
       gaDomains,
+      // exactMatching
+      exactMatchingFlows,
+      exactMatchingFlowDomains,
     };
   };
 

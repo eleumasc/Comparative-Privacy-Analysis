@@ -1,4 +1,4 @@
-import { Cookie, Frame, TaintReport } from "../model";
+import { KeyValuePair, Cookie, Frame, TaintReport } from "../model";
 import { findLCSubstring } from "../util/findLCSubstring";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 
@@ -8,6 +8,7 @@ export interface Flow {
   sink: string;
   targetSite: string;
   sinkScriptUrl: string;
+  exactMatching: boolean;
 }
 
 export type Source = "cookie" | "storageItem";
@@ -93,13 +94,22 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
 
     const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
     const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
-    const createSingleFlow = (source: Source, sourceKeys: string[]) => {
+    const createSingleFlow = (source: Source, sourceKeys: string[]): Flow => {
       return {
         source,
         sourceKeys,
         sink,
         targetSite,
         sinkScriptUrl,
+        exactMatching: sourceKeys.some((sourceKey) => {
+          const pairs: KeyValuePair[] =
+            source === "cookie" ? frame.cookies : frame.storageItems;
+          const pair = pairs.find((pair) => pair.key === sourceKey);
+          if (typeof pair === "undefined") {
+            return false;
+          }
+          return str.includes(pair.value);
+        }),
       };
     };
 
