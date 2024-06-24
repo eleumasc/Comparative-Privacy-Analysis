@@ -3,14 +3,7 @@ import { Config } from "./Config";
 import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
 import { Flow, equalsFlow, getFrameFlows } from "./measurement/Flow";
 import { SiteAnalysisData } from "./measurement/SiteAnalysisData";
-import {
-  AnalysisDetail,
-  Cookie,
-  Frame,
-  Request,
-  SitesEntry,
-  StorageItem,
-} from "./model";
+import { AnalysisDetail, Request, SitesEntry } from "./model";
 import { distinct, divide, mapSequentialAsync } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
@@ -20,6 +13,11 @@ import { isNonNullable } from "./util/types";
 import { sum, countIfNonZero, bothSumCount } from "./util/stats";
 import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
+import { ContextSet, ContextFrame, Context } from "./measurement/ContextSet";
+import {
+  equalsRequestFlow,
+  getFrameRequestFlows,
+} from "./measurement/RequestFlow";
 
 const DEFAULT_CONCURRENCY_LEVEL = 4;
 
@@ -55,6 +53,9 @@ interface SiteGeneralReport {
   // matching
   notSubstrMatchingTrkFlows: number;
   notLCSMatchingTrkFlows: number;
+  // requestFlows
+  requestFlows: number;
+  trkRequestFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -124,6 +125,11 @@ interface GlobalGeneralReport {
   notSubstrMatchingTrkFlowDomains: number;
   notLCSMatchingTrkFlows: number;
   notLCSMatchingTrkFlowDomains: number;
+  // requestFlows
+  requestFlows: number;
+  requestFlowDomains: number;
+  trkRequestFlows: number;
+  trkRequestFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -321,23 +327,6 @@ const processSite = (
   sitesEntry: SitesEntry
 ): SiteReport => {
   console.log(sitesEntry.siteIndex, sitesEntry.site);
-
-  interface ContextFrame {
-    frame: Frame;
-    requests: Request[];
-  }
-
-  interface Context {
-    origin: string;
-    cookies: Cookie[];
-    storageItems: StorageItem[];
-    frames: ContextFrame[];
-  }
-
-  interface ContextSet {
-    firstPartyContext: Context;
-    thirdPartyContexts: Context[];
-  }
 
   const getContextSet = (detail: AnalysisDetail): ContextSet => {
     const contextMap = detail.frames.reduce((contextMap, frame) => {
@@ -543,6 +532,19 @@ const processSite = (
 
     const notLCSMatchingTrkFlows = trkFlows.filter((flow) => !flow.lcsMatching);
 
+    const requestFlows = distinct(
+      [tf1ACtx.frames, tf1BCtx.frames].flatMap((context) =>
+        getFrameRequestFlows(context)
+      ),
+      equalsRequestFlow
+    ).filter((flow) => flow.targetSite !== firstPartySite); // consider just cross-site flows
+
+    const trkRequestFlows = requestFlows.filter((flow) => {
+      return (
+        flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
+      ).includes(flow.sourceKey);
+    });
+
     return {
       general: {
         cookies: cookieKeys.length,
@@ -561,9 +563,10 @@ const processSite = (
           trkStorageItemKeys.includes("_ga")
             ? 1
             : 0,
-
         notSubstrMatchingTrkFlows: notSubstrMatchingTrkFlows.length,
         notLCSMatchingTrkFlows: notLCSMatchingTrkFlows.length,
+        requestFlows: requestFlows.length,
+        trkRequestFlows: trkRequestFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -639,6 +642,8 @@ const combineSiteGeneralReports = (
     notLCSMatchingTrkFlows: sum(
       reports.map(({ notLCSMatchingTrkFlows }) => notLCSMatchingTrkFlows)
     ),
+    requestFlows: sum(reports.map(({ requestFlows }) => requestFlows)),
+    trkRequestFlows: sum(reports.map(({ trkRequestFlows }) => trkRequestFlows)),
   };
 };
 
@@ -790,6 +795,13 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       reports.map((report) => report.notLCSMatchingTrkFlows)
     );
 
+    const [requestFlows, requestFlowDomains] = bothSumCount(
+      reports.map((report) => report.requestFlows)
+    );
+    const [trkRequestFlows, trkRequestFlowDomains] = bothSumCount(
+      reports.map((report) => report.trkRequestFlows)
+    );
+
     return {
       // cookies
       cookies,
@@ -827,6 +839,11 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       notSubstrMatchingTrkFlowDomains,
       notLCSMatchingTrkFlows,
       notLCSMatchingTrkFlowDomains,
+      // requestFlows
+      requestFlows,
+      requestFlowDomains,
+      trkRequestFlows,
+      trkRequestFlowDomains,
     };
   };
 

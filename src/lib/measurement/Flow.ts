@@ -1,5 +1,5 @@
+import { Matching, lcsMatches, substrMatches } from "./Matching";
 import { CSSI, Cookie, Frame, TaintReport } from "../model";
-import { findLCSubstring } from "../util/findLCSubstring";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 
 export interface Flow {
@@ -72,11 +72,8 @@ const getNetworkSinkFromTaintReport = (
 };
 
 const assignCookieKeys = (value: string, cookies: Cookie[]): string[] => {
-  if (value.length < 8) {
-    return [];
-  }
   return cookies
-    .filter((cookie) => findLCSubstring(cookie.value, value).str.length >= 8)
+    .filter((cookie) => lcsMatches(cookie.value, value))
     .map(({ key }) => key);
 };
 
@@ -96,9 +93,7 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
     const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
     const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
     const createSingleFlow = (source: Source, sourceKeys: string[]): Flow => {
-      const matches = (
-        matchFn: (cssiValue: string, sinkStr: string) => boolean
-      ): boolean => {
+      const matchesFlow = (matching: Matching): boolean => {
         return sourceKeys.some((sourceKey) => {
           const cssis: CSSI[] =
             source === "cookie" ? frame.cookies : frame.storageItems;
@@ -106,7 +101,7 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
           if (typeof cssi === "undefined") {
             return false;
           }
-          return matchFn(cssi.value, str);
+          return matching(cssi.value, str);
         });
       };
 
@@ -116,13 +111,8 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
         sink,
         targetSite,
         sinkScriptUrl,
-        substrMatching: matches((cssiValue, sinkStr) =>
-          sinkStr.includes(cssiValue)
-        ),
-        lcsMatching: matches(
-          (cssiValue, sinkStr) =>
-            findLCSubstring(cssiValue, sinkStr).str.length >= 8
-        ),
+        substrMatching: matchesFlow(substrMatches),
+        lcsMatching: matchesFlow(lcsMatches),
       };
     };
 
