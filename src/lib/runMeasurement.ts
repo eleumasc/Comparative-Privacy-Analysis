@@ -11,7 +11,7 @@ import {
   SitesEntry,
   StorageItem,
 } from "./model";
-import { distinct, divide, mapSequentialAsync } from "./util/array";
+import { distinct } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
 import path from "path";
@@ -20,6 +20,7 @@ import { isNonNullable } from "./util/types";
 import { sum, countIfNonZero, bothSumCount } from "./util/stats";
 import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
+import { evaluateInTaskPool } from "./util/startTaskPool";
 
 const DEFAULT_CONCURRENCY_LEVEL = 4;
 
@@ -263,47 +264,39 @@ export const runMeasurement = async (config: Config) => {
 const getSiteReports = async (
   sitesEntries: ExtendedSitesEntry[],
   concurrencyLevel: number
-) => {
-  const sitesEntriesPerThread = divide(
-    sitesEntries,
-    Math.ceil(sitesEntries.length / concurrencyLevel)
-  );
-
+): Promise<SiteReport[]> => {
   return (
-    await Promise.all(
-      sitesEntriesPerThread.map(async (sitesEntries) => {
+    await evaluateInTaskPool(
+      sitesEntries.map((sitesEntry) => async () => {
         const worker = new Worker(__filename);
         const agent = new Agent(worker);
         try {
           return (await agent.call(
-            processSiteMulti.name,
-            sitesEntries
-          )) as SiteReport[];
+            processSitesEntry.name,
+            sitesEntry
+          )) as SiteReport | null;
         } finally {
           worker.terminate();
         }
-      })
+      }),
+      concurrencyLevel
     )
-  ).flat();
+  ).filter(isNonNullable);
 };
 
-export const processSiteMulti = async (
-  sitesEntries: ExtendedSitesEntry[]
-): Promise<SiteReport[]> => {
-  return (
-    await mapSequentialAsync(sitesEntries, async (sitesEntry) => {
-      try {
-        const data = await SiteAnalysisData.fromFile(
-          sitesEntry.outputPath,
-          sitesEntry
-        );
-        return processSite(data, sitesEntry);
-      } catch (e) {
-        console.log(e);
-        return null;
-      }
-    })
-  ).filter(isNonNullable);
+export const processSitesEntry = async (
+  sitesEntry: ExtendedSitesEntry
+): Promise<SiteReport | null> => {
+  try {
+    const data = await SiteAnalysisData.fromFile(
+      sitesEntry.outputPath,
+      sitesEntry
+    );
+    return processSite(data, sitesEntry);
+  } catch (e) {
+    console.log(e);
+    return null;
+  }
 };
 
 const processSite = (
@@ -933,9 +926,9 @@ if (!isMainThread) {
     const agent = new Agent(parentPort);
 
     agent.register(
-      processSiteMulti.name,
-      (sitesEntries: ExtendedSitesEntry[]): Promise<SiteReport[]> =>
-        processSiteMulti(sitesEntries)
+      processSitesEntry.name,
+      (sitesEntry: ExtendedSitesEntry): Promise<SiteReport | null> =>
+        processSitesEntry(sitesEntry)
     );
   }
 }
