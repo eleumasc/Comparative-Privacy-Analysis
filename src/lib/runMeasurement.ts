@@ -525,18 +525,20 @@ const processSite = (
 
     const notLCSMatchingTrkFlows = trkFlows.filter((flow) => !flow.lcsMatching);
 
-    const requestFlows = distinct(
-      [tf1ACtx.frames, tf1BCtx.frames].flatMap((context) =>
-        getFrameRequestFlows(context)
-      ),
-      equalsRequestFlow
-    ).filter((flow) => flow.targetSite !== firstPartySite); // consider just cross-site flows
+    // const requestFlows = distinct(
+    //   [tf1ACtx.frames, tf1BCtx.frames].flatMap((context) =>
+    //     getFrameRequestFlows(context)
+    //   ),
+    //   equalsRequestFlow
+    // ).filter((flow) => flow.targetSite !== firstPartySite); // consider just cross-site flows
 
-    const trkRequestFlows = requestFlows.filter((flow) => {
-      return (
-        flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
-      ).includes(flow.sourceKey);
-    });
+    // const trkRequestFlows = requestFlows.filter((flow) => {
+    //   return (
+    //     flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
+    //   ).includes(flow.sourceKey);
+    // });
+    const requestFlows = [];
+    const trkRequestFlows = [];
 
     return {
       general: {
