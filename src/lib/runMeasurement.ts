@@ -15,7 +15,6 @@ import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
 import { ContextSet, ContextFrame, Context } from "./measurement/ContextSet";
 import {
-  RequestFlow,
   equalsRequestFlow,
   getFrameRequestFlows,
 } from "./measurement/RequestFlow";
@@ -538,29 +537,6 @@ const processSite = (
         flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
       ).includes(flow.sourceKey);
     });
-
-    const isRequestFlowEquivalentToFlow = (
-      requestFlow: RequestFlow,
-      flow: Flow
-    ): boolean => {
-      return (
-        requestFlow.source === flow.source &&
-        flow.sourceKeys.includes(requestFlow.sourceKey) &&
-        requestFlow.targetSite === flow.targetSite
-      );
-    };
-    const noTrkFlowTrkRequestFlows = trkRequestFlows.filter((requestFlow) =>
-      trkFlows.every(
-        (flow) => !isRequestFlowEquivalentToFlow(requestFlow, flow)
-      )
-    );
-    if (noTrkFlowTrkRequestFlows.length > 0) {
-      console.log(
-        "[noTrkFlowTrkRequestFlows]",
-        data.site,
-        noTrkFlowTrkRequestFlows
-      );
-    }
 
     return {
       general: {
