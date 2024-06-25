@@ -25,14 +25,3 @@ export const divide = <T>(array: T[], size: number): T[][] => {
   }
   return result;
 };
-
-export const mapSequentialAsync = async <A, B>(
-  array: A[],
-  callbackfn: (value: A, index: number, array: A[]) => Promise<B>
-): Promise<B[]> => {
-  let result: B[] = [];
-  for (const [index, element] of array.entries()) {
-    result = [...result, await callbackfn(element, index, array)];
-  }
-  return result;
-};
