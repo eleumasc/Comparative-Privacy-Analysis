@@ -1,4 +1,5 @@
 import { CSSI, Request } from "../model";
+import { isNonNullable } from "../util/types";
 import { ContextFrame } from "./ContextSet";
 import { Source } from "./Flow";
 import { Matching, lcsMatches } from "./Matching";
@@ -30,7 +31,8 @@ const createMatchesRequestFlow =
     } else if (typeof formData !== "undefined") {
       return formData.some(
         ({ key: entryKey, value: entryValue }) =>
-          matching(value, entryKey) || matching(value, entryValue)
+          (isNonNullable(entryKey) && matching(value, entryKey)) ||
+          (isNonNullable(entryValue) && matching(value, entryValue))
       );
     } else {
       return false;
