@@ -1,6 +1,7 @@
-import { Matching, doubleSubstrMatches, lcsMatches } from "./Matching";
+import { lcsMatches } from "./lcsMatches";
 import { CSSI, Cookie, Frame, TaintReport } from "../model";
 import { getSiteFromHostname } from "./getSiteFromHostname";
+import { syntacticallyMatchesUrl } from "./syntacticallyMatchesUrl";
 
 export interface Flow {
   source: Source;
@@ -92,25 +93,23 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
     const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
     const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
     const createSingleFlow = (source: Source, sourceKeys: string[]): Flow => {
-      const matchesFlow = (matching: Matching): boolean => {
-        return sourceKeys.some((sourceKey) => {
-          const cssis: CSSI[] =
-            source === "cookie" ? frame.cookies : frame.storageItems;
-          const cssi = cssis.find((cssi) => cssi.key === sourceKey);
-          if (typeof cssi === "undefined") {
-            return false;
-          }
-          return matching(cssi.value, str);
-        });
-      };
-
       return {
         source,
         sourceKeys,
         sink,
         targetSite,
         sinkScriptUrl,
-        syntacticMatching: matchesFlow(doubleSubstrMatches),
+        syntacticMatching: ((): boolean => {
+          return sourceKeys.some((sourceKey) => {
+            const cssis: CSSI[] =
+              source === "cookie" ? frame.cookies : frame.storageItems;
+            const cssi = cssis.find((cssi) => cssi.key === sourceKey);
+            if (typeof cssi === "undefined") {
+              return false;
+            }
+            return syntacticallyMatchesUrl(cssi.value, sinkTargetURL);
+          });
+        })(),
       };
     };
 

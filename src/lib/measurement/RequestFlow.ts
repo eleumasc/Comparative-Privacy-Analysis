@@ -1,8 +1,8 @@
 import { CSSI } from "../model";
 import { ContextFrame } from "./ContextSet";
 import { Source } from "./Flow";
-import { Matching, doubleSubstrMatches } from "./Matching";
 import { getSiteFromHostname } from "./getSiteFromHostname";
+import { syntacticallyMatchesUrl } from "./syntacticallyMatchesUrl";
 
 export interface RequestFlow {
   source: Source;
@@ -18,8 +18,13 @@ export const getFrameRequestFlows = (
     const { cookies, storageItems } = frame;
 
     return requests.flatMap((request): RequestFlow[] => {
-      const { url } = request;
-      const targetSite = getSiteFromHostname(new URL(url).hostname);
+      const { url: requestUrl } = request;
+      const targetSite = getSiteFromHostname(new URL(requestUrl).hostname);
+
+      if (!URL.canParse(requestUrl)) {
+        return [];
+      }
+      const requestURL = new URL(requestUrl);
 
       const getRequestFlows = (
         source: Source,
@@ -28,19 +33,7 @@ export const getFrameRequestFlows = (
         return cssis.flatMap((cssi): RequestFlow[] => {
           const { key, value } = cssi;
 
-          const matchesRequestFlow = (matching: Matching): boolean => {
-            const { url } = request;
-            if (!URL.canParse(url)) {
-              return false;
-            }
-            const { searchParams } = new URL(url);
-            return [...searchParams].some(
-              ([pKey, pValue]) =>
-                matching(value, pKey) || matching(value, pValue)
-            );
-          };
-
-          return matchesRequestFlow(doubleSubstrMatches)
+          return syntacticallyMatchesUrl(value, requestURL)
             ? [{ source, sourceKey: key, targetSite: targetSite }]
             : [];
         });
