@@ -6,15 +6,20 @@ export const substrMatches: Matching = (source, target) => {
   return target.includes(source);
 };
 
-export const doubleSubstrMatches: Matching = (source, target) => {
-  return target.includes(source) || source.includes(target);
-};
+const LCS_THRESHOLD = 8;
 
 export const lcsMatches: Matching = (source, target) => {
-  const THRESHOLD = 8;
-
-  if (source.length < THRESHOLD || target.length < THRESHOLD) {
+  if (source.length < LCS_THRESHOLD || target.length < LCS_THRESHOLD) {
     return false;
   }
-  return findLCSubstring(source, target).str.length >= THRESHOLD;
+  return findLCSubstring(source, target).str.length >= LCS_THRESHOLD;
+};
+
+const DOUBLE_SUBSTR_THRESHOLD = 8;
+
+export const doubleSubstrMatches: Matching = (source, target) => {
+  return (
+    source.length >= DOUBLE_SUBSTR_THRESHOLD &&
+    (target.includes(source) || source.includes(target))
+  );
 };

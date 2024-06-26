@@ -30,7 +30,14 @@ export const getFrameRequestFlows = (
 
           const matchesRequestFlow = (matching: Matching): boolean => {
             const { url } = request;
-            return matching(value, url);
+            if (!URL.canParse(url)) {
+              return false;
+            }
+            const { searchParams } = new URL(url);
+            return [...searchParams].some(
+              ([pKey, pValue]) =>
+                matching(value, pKey) || matching(value, pValue)
+            );
           };
 
           return matchesRequestFlow(doubleSubstrMatches)
