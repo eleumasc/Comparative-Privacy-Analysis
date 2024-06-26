@@ -1,4 +1,4 @@
-import { Matching, lcsMatches, substrMatches } from "./Matching";
+import { Matching, doubleSubstrMatches, lcsMatches } from "./Matching";
 import { CSSI, Cookie, Frame, TaintReport } from "../model";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 
@@ -8,8 +8,7 @@ export interface Flow {
   sink: string;
   targetSite: string;
   sinkScriptUrl: string;
-  substrMatching: boolean;
-  lcsMatching: boolean;
+  syntacticMatching: boolean;
 }
 
 export type Source = "cookie" | "storageItem";
@@ -111,8 +110,7 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
         sink,
         targetSite,
         sinkScriptUrl,
-        substrMatching: matchesFlow(substrMatches),
-        lcsMatching: matchesFlow(lcsMatches),
+        syntacticMatching: matchesFlow(doubleSubstrMatches),
       };
     };
 

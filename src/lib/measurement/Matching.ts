@@ -6,6 +6,10 @@ export const substrMatches: Matching = (source, target) => {
   return target.includes(source);
 };
 
+export const doubleSubstrMatches: Matching = (source, target) => {
+  return target.includes(source) || source.includes(target);
+};
+
 export const lcsMatches: Matching = (source, target) => {
   const THRESHOLD = 8;
 

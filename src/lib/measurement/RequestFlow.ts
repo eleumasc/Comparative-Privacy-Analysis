@@ -1,8 +1,7 @@
-import { CSSI, Request } from "../model";
-import { isNonNullable } from "../util/types";
+import { CSSI } from "../model";
 import { ContextFrame } from "./ContextSet";
 import { Source } from "./Flow";
-import { Matching, lcsMatches } from "./Matching";
+import { Matching, doubleSubstrMatches } from "./Matching";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 
 export interface RequestFlow {
@@ -10,34 +9,6 @@ export interface RequestFlow {
   sourceKey: string;
   targetSite: string;
 }
-
-const createMatchesRequestFlow =
-  (value: string, request: Request) =>
-  (matching: Matching): boolean => {
-    const { url, body } = request;
-
-    if (matching(value, url)) {
-      return true;
-    }
-
-    if (body === null) {
-      return false;
-    }
-
-    const { raw, formData } = body;
-
-    if (typeof raw !== "undefined") {
-      return matching(value, raw);
-    } else if (typeof formData !== "undefined") {
-      return formData.some(
-        ({ key: entryKey, value: entryValue }) =>
-          (isNonNullable(entryKey) && matching(value, entryKey)) ||
-          (isNonNullable(entryValue) && matching(value, entryValue))
-      );
-    } else {
-      return false;
-    }
-  };
 
 export const getFrameRequestFlows = (
   contextFrames: ContextFrame[]
@@ -57,9 +28,12 @@ export const getFrameRequestFlows = (
         return cssis.flatMap((cssi): RequestFlow[] => {
           const { key, value } = cssi;
 
-          const matchesRequestFlow = createMatchesRequestFlow(value, request);
+          const matchesRequestFlow = (matching: Matching): boolean => {
+            const { url } = request;
+            return matching(value, url);
+          };
 
-          return matchesRequestFlow(lcsMatches)
+          return matchesRequestFlow(doubleSubstrMatches)
             ? [{ source, sourceKey: key, targetSite: targetSite }]
             : [];
         });

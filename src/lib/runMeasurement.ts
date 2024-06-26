@@ -52,8 +52,7 @@ interface SiteGeneralReport {
   // ga
   ga: number;
   // matching
-  notSubstrMatchingTrkFlows: number;
-  notLCSMatchingTrkFlows: number;
+  notSyntacticMatchingTrkFlows: number;
   // requestFlows
   requestFlows: number;
   trkRequestFlows: number;
@@ -122,10 +121,8 @@ interface GlobalGeneralReport {
   // ga
   gaDomains: number;
   // matching
-  notSubstrMatchingTrkFlows: number;
-  notSubstrMatchingTrkFlowDomains: number;
-  notLCSMatchingTrkFlows: number;
-  notLCSMatchingTrkFlowDomains: number;
+  notSyntacticMatchingTrkFlows: number;
+  notSyntacticMatchingTrkFlowDomains: number;
   // requestFlows
   requestFlows: number;
   requestFlowDomains: number;
@@ -519,11 +516,9 @@ const processSite = (
     const brAggregate = compareBrowser("brave");
     const bxAggregate = compareBrowser("brave-aggr");
 
-    const notSubstrMatchingTrkFlows = trkFlows.filter(
-      (flow) => !flow.substrMatching
+    const notSyntacticMatchingTrkFlows = trkFlows.filter(
+      (flow) => !flow.syntacticMatching
     );
-
-    const notLCSMatchingTrkFlows = trkFlows.filter((flow) => !flow.lcsMatching);
 
     const requestFlows = distinct(
       [tf1ACtx.frames, tf1BCtx.frames].flatMap((context) =>
@@ -556,8 +551,7 @@ const processSite = (
           trkStorageItemKeys.includes("_ga")
             ? 1
             : 0,
-        notSubstrMatchingTrkFlows: notSubstrMatchingTrkFlows.length,
-        notLCSMatchingTrkFlows: notLCSMatchingTrkFlows.length,
+        notSyntacticMatchingTrkFlows: notSyntacticMatchingTrkFlows.length,
         requestFlows: requestFlows.length,
         trkRequestFlows: trkRequestFlows.length,
       },
@@ -629,11 +623,10 @@ const combineSiteGeneralReports = (
       reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
     ),
     ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
-    notSubstrMatchingTrkFlows: sum(
-      reports.map(({ notSubstrMatchingTrkFlows }) => notSubstrMatchingTrkFlows)
-    ),
-    notLCSMatchingTrkFlows: sum(
-      reports.map(({ notLCSMatchingTrkFlows }) => notLCSMatchingTrkFlows)
+    notSyntacticMatchingTrkFlows: sum(
+      reports.map(
+        ({ notSyntacticMatchingTrkFlows }) => notSyntacticMatchingTrkFlows
+      )
     ),
     requestFlows: sum(reports.map(({ requestFlows }) => requestFlows)),
     trkRequestFlows: sum(reports.map(({ trkRequestFlows }) => trkRequestFlows)),
@@ -781,12 +774,10 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
 
     const gaDomains = countIfNonZero(reports.map((report) => report.ga));
 
-    const [notSubstrMatchingTrkFlows, notSubstrMatchingTrkFlowDomains] =
-      bothSumCount(reports.map((report) => report.notSubstrMatchingTrkFlows));
-
-    const [notLCSMatchingTrkFlows, notLCSMatchingTrkFlowDomains] = bothSumCount(
-      reports.map((report) => report.notLCSMatchingTrkFlows)
-    );
+    const [notSyntacticMatchingTrkFlows, notSyntacticMatchingTrkFlowDomains] =
+      bothSumCount(
+        reports.map((report) => report.notSyntacticMatchingTrkFlows)
+      );
 
     const [requestFlows, requestFlowDomains] = bothSumCount(
       reports.map((report) => report.requestFlows)
@@ -828,10 +819,8 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       // ga
       gaDomains,
       // matching
-      notSubstrMatchingTrkFlows,
-      notSubstrMatchingTrkFlowDomains,
-      notLCSMatchingTrkFlows,
-      notLCSMatchingTrkFlowDomains,
+      notSyntacticMatchingTrkFlows,
+      notSyntacticMatchingTrkFlowDomains,
       // requestFlows
       requestFlows,
       requestFlowDomains,
