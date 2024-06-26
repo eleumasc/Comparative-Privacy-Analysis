@@ -52,7 +52,7 @@ interface SiteGeneralReport {
   // ga
   ga: number;
   // matching
-  notSyntacticMatchingTrkFlows: number;
+  syntacticMatchingTrkFlows: number;
   // matchingFlows
   matchingFlows: number;
   trkMatchingFlows: number;
@@ -121,8 +121,8 @@ interface GlobalGeneralReport {
   // ga
   gaDomains: number;
   // matching
-  notSyntacticMatchingTrkFlows: number;
-  notSyntacticMatchingTrkFlowDomains: number;
+  syntacticMatchingTrkFlows: number;
+  syntacticMatchingTrkFlowDomains: number;
   // matchingFlows
   matchingFlows: number;
   matchingFlowDomains: number;
@@ -516,8 +516,8 @@ const processSite = (
     const brAggregate = compareBrowser("brave");
     const bxAggregate = compareBrowser("brave-aggr");
 
-    const notSyntacticMatchingTrkFlows = trkFlows.filter(
-      (flow) => !flow.syntacticMatching
+    const syntacticMatchingTrkFlows = trkFlows.filter(
+      (flow) => flow.syntacticMatching
     );
 
     const matchingFlows = distinct(
@@ -551,7 +551,7 @@ const processSite = (
           trkStorageItemKeys.includes("_ga")
             ? 1
             : 0,
-        notSyntacticMatchingTrkFlows: notSyntacticMatchingTrkFlows.length,
+        syntacticMatchingTrkFlows: syntacticMatchingTrkFlows.length,
         matchingFlows: matchingFlows.length,
         trkMatchingFlows: trkMatchingFlows.length,
       },
@@ -623,10 +623,8 @@ const combineSiteGeneralReports = (
       reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
     ),
     ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
-    notSyntacticMatchingTrkFlows: sum(
-      reports.map(
-        ({ notSyntacticMatchingTrkFlows }) => notSyntacticMatchingTrkFlows
-      )
+    syntacticMatchingTrkFlows: sum(
+      reports.map(({ syntacticMatchingTrkFlows }) => syntacticMatchingTrkFlows)
     ),
     matchingFlows: sum(reports.map(({ matchingFlows }) => matchingFlows)),
     trkMatchingFlows: sum(
@@ -776,10 +774,8 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
 
     const gaDomains = countIfNonZero(reports.map((report) => report.ga));
 
-    const [notSyntacticMatchingTrkFlows, notSyntacticMatchingTrkFlowDomains] =
-      bothSumCount(
-        reports.map((report) => report.notSyntacticMatchingTrkFlows)
-      );
+    const [syntacticMatchingTrkFlows, syntacticMatchingTrkFlowDomains] =
+      bothSumCount(reports.map((report) => report.syntacticMatchingTrkFlows));
 
     const [matchingFlows, matchingFlowDomains] = bothSumCount(
       reports.map((report) => report.matchingFlows)
@@ -821,8 +817,8 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       // ga
       gaDomains,
       // matching
-      notSyntacticMatchingTrkFlows,
-      notSyntacticMatchingTrkFlowDomains,
+      syntacticMatchingTrkFlows,
+      syntacticMatchingTrkFlowDomains,
       // matchingFlows
       matchingFlows,
       matchingFlowDomains,
