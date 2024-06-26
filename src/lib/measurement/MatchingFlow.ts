@@ -1,6 +1,6 @@
 import { CSSI } from "../model";
 import { ContextFrame } from "./ContextSet";
-import { Source } from "./Flow";
+import { Flow, Source } from "./Flow";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 import { syntacticallyMatchesUrl } from "./syntacticallyMatchesUrl";
 
@@ -54,4 +54,11 @@ export const equalsMatchingFlow = (
     x.sourceKey === y.sourceKey &&
     x.targetSite === y.targetSite
   );
+};
+
+export const convertFlowToMatchingFlowArray = (flow: Flow): MatchingFlow[] => {
+  const { source, sourceKeys, targetSite } = flow;
+  return sourceKeys.map((sourceKey) => {
+    return { source, sourceKey, targetSite };
+  });
 };

@@ -15,6 +15,7 @@ import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
 import { ContextSet, ContextFrame, Context } from "./measurement/ContextSet";
 import {
+  convertFlowToMatchingFlowArray,
   equalsMatchingFlow,
   getFrameMatchingFlows,
 } from "./measurement/MatchingFlow";
@@ -56,6 +57,9 @@ interface SiteGeneralReport {
   // matchingFlows
   matchingFlows: number;
   trkMatchingFlows: number;
+  // convertedFlows
+  convertedFlows: number;
+  trkConvertedFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -128,6 +132,11 @@ interface GlobalGeneralReport {
   matchingFlowDomains: number;
   trkMatchingFlows: number;
   trkMatchingFlowDomains: number;
+  // convertedFlows
+  convertedFlows: number;
+  convertedFlowDomains: number;
+  trkConvertedFlows: number;
+  trkConvertedFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -533,6 +542,19 @@ const processSite = (
       ).includes(flow.sourceKey);
     });
 
+    const convertedFlows = distinct(
+      flows.flatMap(
+        (flow) => convertFlowToMatchingFlowArray(flow),
+        equalsMatchingFlow
+      )
+    );
+
+    const trkConvertedFlows = convertedFlows.filter((flow) => {
+      return (
+        flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
+      ).includes(flow.sourceKey);
+    });
+
     return {
       general: {
         cookies: cookieKeys.length,
@@ -554,6 +576,8 @@ const processSite = (
         syntacticMatchingTrkFlows: syntacticMatchingTrkFlows.length,
         matchingFlows: matchingFlows.length,
         trkMatchingFlows: trkMatchingFlows.length,
+        convertedFlows: convertedFlows.length,
+        trkConvertedFlows: trkConvertedFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -629,6 +653,10 @@ const combineSiteGeneralReports = (
     matchingFlows: sum(reports.map(({ matchingFlows }) => matchingFlows)),
     trkMatchingFlows: sum(
       reports.map(({ trkMatchingFlows }) => trkMatchingFlows)
+    ),
+    convertedFlows: sum(reports.map(({ convertedFlows }) => convertedFlows)),
+    trkConvertedFlows: sum(
+      reports.map(({ trkConvertedFlows }) => trkConvertedFlows)
     ),
   };
 };
@@ -784,6 +812,13 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       reports.map((report) => report.trkMatchingFlows)
     );
 
+    const [convertedFlows, convertedFlowDomains] = bothSumCount(
+      reports.map((report) => report.convertedFlows)
+    );
+    const [trkConvertedFlows, trkConvertedFlowDomains] = bothSumCount(
+      reports.map((report) => report.trkConvertedFlows)
+    );
+
     return {
       // cookies
       cookies,
@@ -824,6 +859,11 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       matchingFlowDomains,
       trkMatchingFlows,
       trkMatchingFlowDomains,
+      // convertedFlows
+      convertedFlows,
+      convertedFlowDomains,
+      trkConvertedFlows,
+      trkConvertedFlowDomains,
     };
   };
 
