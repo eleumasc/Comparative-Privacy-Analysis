@@ -15,9 +15,9 @@ import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
 import { ContextSet, ContextFrame, Context } from "./measurement/ContextSet";
 import {
-  equalsRequestFlow,
-  getFrameRequestFlows,
-} from "./measurement/RequestFlow";
+  equalsMatchingFlow,
+  getFrameMatchingFlows,
+} from "./measurement/MatchingFlow";
 import { evaluateInTaskPool } from "./util/startTaskPool";
 
 const DEFAULT_CONCURRENCY_LEVEL = 4;
@@ -53,9 +53,9 @@ interface SiteGeneralReport {
   ga: number;
   // matching
   notSyntacticMatchingTrkFlows: number;
-  // requestFlows
-  requestFlows: number;
-  trkRequestFlows: number;
+  // matchingFlows
+  matchingFlows: number;
+  trkMatchingFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -123,11 +123,11 @@ interface GlobalGeneralReport {
   // matching
   notSyntacticMatchingTrkFlows: number;
   notSyntacticMatchingTrkFlowDomains: number;
-  // requestFlows
-  requestFlows: number;
-  requestFlowDomains: number;
-  trkRequestFlows: number;
-  trkRequestFlowDomains: number;
+  // matchingFlows
+  matchingFlows: number;
+  matchingFlowDomains: number;
+  trkMatchingFlows: number;
+  trkMatchingFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -520,14 +520,14 @@ const processSite = (
       (flow) => !flow.syntacticMatching
     );
 
-    const requestFlows = distinct(
+    const matchingFlows = distinct(
       [tf1ACtx.frames, tf1BCtx.frames].flatMap((context) =>
-        getFrameRequestFlows(context)
+        getFrameMatchingFlows(context)
       ),
-      equalsRequestFlow
+      equalsMatchingFlow
     ).filter((flow) => flow.targetSite !== firstPartySite); // consider just cross-site flows
 
-    const trkRequestFlows = requestFlows.filter((flow) => {
+    const trkMatchingFlows = matchingFlows.filter((flow) => {
       return (
         flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
       ).includes(flow.sourceKey);
@@ -552,8 +552,8 @@ const processSite = (
             ? 1
             : 0,
         notSyntacticMatchingTrkFlows: notSyntacticMatchingTrkFlows.length,
-        requestFlows: requestFlows.length,
-        trkRequestFlows: trkRequestFlows.length,
+        matchingFlows: matchingFlows.length,
+        trkMatchingFlows: trkMatchingFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -628,8 +628,10 @@ const combineSiteGeneralReports = (
         ({ notSyntacticMatchingTrkFlows }) => notSyntacticMatchingTrkFlows
       )
     ),
-    requestFlows: sum(reports.map(({ requestFlows }) => requestFlows)),
-    trkRequestFlows: sum(reports.map(({ trkRequestFlows }) => trkRequestFlows)),
+    matchingFlows: sum(reports.map(({ matchingFlows }) => matchingFlows)),
+    trkMatchingFlows: sum(
+      reports.map(({ trkMatchingFlows }) => trkMatchingFlows)
+    ),
   };
 };
 
@@ -779,11 +781,11 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
         reports.map((report) => report.notSyntacticMatchingTrkFlows)
       );
 
-    const [requestFlows, requestFlowDomains] = bothSumCount(
-      reports.map((report) => report.requestFlows)
+    const [matchingFlows, matchingFlowDomains] = bothSumCount(
+      reports.map((report) => report.matchingFlows)
     );
-    const [trkRequestFlows, trkRequestFlowDomains] = bothSumCount(
-      reports.map((report) => report.trkRequestFlows)
+    const [trkMatchingFlows, trkMatchingFlowDomains] = bothSumCount(
+      reports.map((report) => report.trkMatchingFlows)
     );
 
     return {
@@ -821,11 +823,11 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       // matching
       notSyntacticMatchingTrkFlows,
       notSyntacticMatchingTrkFlowDomains,
-      // requestFlows
-      requestFlows,
-      requestFlowDomains,
-      trkRequestFlows,
-      trkRequestFlowDomains,
+      // matchingFlows
+      matchingFlows,
+      matchingFlowDomains,
+      trkMatchingFlows,
+      trkMatchingFlowDomains,
     };
   };
 

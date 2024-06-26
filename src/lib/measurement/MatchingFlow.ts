@@ -4,20 +4,20 @@ import { Source } from "./Flow";
 import { getSiteFromHostname } from "./getSiteFromHostname";
 import { syntacticallyMatchesUrl } from "./syntacticallyMatchesUrl";
 
-export interface RequestFlow {
+export interface MatchingFlow {
   source: Source;
   sourceKey: string;
   targetSite: string;
 }
 
-export const getFrameRequestFlows = (
+export const getFrameMatchingFlows = (
   contextFrames: ContextFrame[]
-): RequestFlow[] => {
+): MatchingFlow[] => {
   return contextFrames.flatMap((contextFrame) => {
     const { frame, requests } = contextFrame;
     const { cookies, storageItems } = frame;
 
-    return requests.flatMap((request): RequestFlow[] => {
+    return requests.flatMap((request): MatchingFlow[] => {
       const { url: requestUrl } = request;
       const targetSite = getSiteFromHostname(new URL(requestUrl).hostname);
 
@@ -26,28 +26,29 @@ export const getFrameRequestFlows = (
       }
       const requestURL = new URL(requestUrl);
 
-      const getRequestFlows = (
+      const getMatchingFlows = (
         source: Source,
         cssis: CSSI[]
-      ): RequestFlow[] => {
-        return cssis.flatMap((cssi): RequestFlow[] => {
-          const { key, value } = cssi;
-
-          return syntacticallyMatchesUrl(value, requestURL)
-            ? [{ source, sourceKey: key, targetSite: targetSite }]
-            : [];
-        });
+      ): MatchingFlow[] => {
+        return cssis
+          .filter(({ value }) => syntacticallyMatchesUrl(value, requestURL))
+          .map(({ key }): MatchingFlow => {
+            return { source, sourceKey: key, targetSite };
+          });
       };
 
       return [
-        ...getRequestFlows("cookie", cookies),
-        ...getRequestFlows("storageItem", storageItems),
+        ...getMatchingFlows("cookie", cookies),
+        ...getMatchingFlows("storageItem", storageItems),
       ];
     });
   });
 };
 
-export const equalsRequestFlow = (x: RequestFlow, y: RequestFlow): boolean => {
+export const equalsMatchingFlow = (
+  x: MatchingFlow,
+  y: MatchingFlow
+): boolean => {
   return (
     x.source === y.source &&
     x.sourceKey === y.sourceKey &&
