@@ -3,14 +3,7 @@ import { Config } from "./Config";
 import { cookieSwapPartyHeuristics } from "./measurement/cookieSwapPartyHeuristics";
 import { Flow, equalsFlow, getFrameFlows } from "./measurement/Flow";
 import { SiteAnalysisData } from "./measurement/SiteAnalysisData";
-import {
-  AnalysisDetail,
-  Cookie,
-  Frame,
-  Request,
-  SitesEntry,
-  StorageItem,
-} from "./model";
+import { AnalysisDetail, Request, SitesEntry } from "./model";
 import { distinct } from "./util/array";
 import { getSiteFromHostname } from "./measurement/getSiteFromHostname";
 import { readFile } from "fs/promises";
@@ -20,11 +13,13 @@ import { isNonNullable } from "./util/types";
 import { sum, countIfNonZero, bothSumCount } from "./util/stats";
 import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
+import { ContextSet, ContextFrame, Context } from "./measurement/ContextSet";
 import { evaluateInTaskPool } from "./util/startTaskPool";
 
 const DEFAULT_CONCURRENCY_LEVEL = 4;
 
 interface SiteReport {
+  site: string;
   firstPartyContext: SiteContextReport;
   thirdPartyContext: SiteContextReport;
 }
@@ -52,6 +47,8 @@ interface SiteGeneralReport {
   trkStorageItemFlows: number;
   // ga
   ga: number;
+  // syntacticMatching
+  syntacticMatchingTrkFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -81,6 +78,7 @@ interface GlobalReport {
   brThirdPartyAggregate: GlobalAggregateReport;
   bxFirstPartyAggregate: GlobalAggregateReport;
   bxThirdPartyAggregate: GlobalAggregateReport;
+  sitesWithOnlyFlowTrackers: string[];
 }
 
 interface GlobalGeneralReport {
@@ -115,6 +113,9 @@ interface GlobalGeneralReport {
   trkCssiFlowDomains: number;
   // ga
   gaDomains: number;
+  // syntacticMatching
+  syntacticMatchingTrkFlows: number;
+  syntacticMatchingTrkFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -304,23 +305,6 @@ const processSite = (
   sitesEntry: SitesEntry
 ): SiteReport => {
   console.log(sitesEntry.siteIndex, sitesEntry.site);
-
-  interface ContextFrame {
-    frame: Frame;
-    requests: Request[];
-  }
-
-  interface Context {
-    origin: string;
-    cookies: Cookie[];
-    storageItems: StorageItem[];
-    frames: ContextFrame[];
-  }
-
-  interface ContextSet {
-    firstPartyContext: Context;
-    thirdPartyContexts: Context[];
-  }
 
   const getContextSet = (detail: AnalysisDetail): ContextSet => {
     const contextMap = detail.frames.reduce((contextMap, frame) => {
@@ -520,6 +504,10 @@ const processSite = (
     const brAggregate = compareBrowser("brave");
     const bxAggregate = compareBrowser("brave-aggr");
 
+    const syntacticMatchingTrkFlows = trkFlows.filter(
+      (flow) => flow.syntacticMatching
+    );
+
     return {
       general: {
         cookies: cookieKeys.length,
@@ -538,6 +526,7 @@ const processSite = (
           trkStorageItemKeys.includes("_ga")
             ? 1
             : 0,
+        syntacticMatchingTrkFlows: syntacticMatchingTrkFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -548,6 +537,7 @@ const processSite = (
   };
 
   return {
+    site: data.site,
     firstPartyContext: processContext((ctxSet) => ctxSet.firstPartyContext)!,
     thirdPartyContext: combineSiteContextReports(
       tf1ACtxSet.thirdPartyContexts
@@ -606,6 +596,9 @@ const combineSiteGeneralReports = (
       reports.map(({ trkStorageItemFlows }) => trkStorageItemFlows)
     ),
     ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
+    syntacticMatchingTrkFlows: sum(
+      reports.map(({ syntacticMatchingTrkFlows }) => syntacticMatchingTrkFlows)
+    ),
   };
 };
 
@@ -750,6 +743,9 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
 
     const gaDomains = countIfNonZero(reports.map((report) => report.ga));
 
+    const [syntacticMatchingTrkFlows, syntacticMatchingTrkFlowDomains] =
+      bothSumCount(reports.map((report) => report.syntacticMatchingTrkFlows));
+
     return {
       // cookies
       cookies,
@@ -782,6 +778,9 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       trkCssiFlowDomains,
       // ga
       gaDomains,
+      // syntacticMatching
+      syntacticMatchingTrkFlows,
+      syntacticMatchingTrkFlowDomains,
     };
   };
 
@@ -872,6 +871,20 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     };
   };
 
+  const getSitesWithOnlyFlowTrackers = (reports: SiteReport[]): string[] => {
+    const trkCookieDomains = reports
+      .filter((report) => report.thirdPartyContext.general.trkCookies > 0)
+      .map(({ site }) => site);
+    const trackerDomainsAll = reports
+      .filter(
+        (report) => report.thirdPartyContext.tfAggregate.trackersAll.length > 0
+      )
+      .map(({ site }) => site);
+    return [...trackerDomainsAll].filter(
+      (site) => !trkCookieDomains.includes(site)
+    );
+  };
+
   return {
     totalGeneral: getGlobalGeneralReport(
       reports.map((report) =>
@@ -917,6 +930,7 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     bxThirdPartyAggregate: getGlobalAggregateReport(
       reports.map((report) => report.thirdPartyContext.bxAggregate)
     ),
+    sitesWithOnlyFlowTrackers: getSitesWithOnlyFlowTrackers(reports),
   };
 };
 

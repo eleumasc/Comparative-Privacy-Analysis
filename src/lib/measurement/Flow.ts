@@ -1,6 +1,7 @@
-import { Cookie, Frame, TaintReport } from "../model";
-import { findLCSubstring } from "../util/findLCSubstring";
+import { lcsMatches } from "./lcsMatches";
+import { CSSI, Cookie, Frame, TaintReport } from "../model";
 import { getSiteFromHostname } from "./getSiteFromHostname";
+import { syntacticallyMatchesUrl } from "./syntacticallyMatchesUrl";
 
 export interface Flow {
   source: Source;
@@ -8,6 +9,7 @@ export interface Flow {
   sink: string;
   targetSite: string;
   sinkScriptUrl: string;
+  syntacticMatching: boolean;
 }
 
 export type Source = "cookie" | "storageItem";
@@ -70,11 +72,8 @@ const getNetworkSinkFromTaintReport = (
 };
 
 const assignCookieKeys = (value: string, cookies: Cookie[]): string[] => {
-  if (value.length < 8) {
-    return [];
-  }
   return cookies
-    .filter((cookie) => findLCSubstring(cookie.value, value).str.length >= 8)
+    .filter((cookie) => lcsMatches(cookie.value, value))
     .map(({ key }) => key);
 };
 
@@ -93,13 +92,24 @@ export const getFrameFlows = (frame: Frame): Flow[] => {
 
     const targetSite = getSiteFromHostname(sinkTargetURL.hostname);
     const sinkScriptUrl = sinkScriptURL.origin + sinkScriptURL.pathname;
-    const createSingleFlow = (source: Source, sourceKeys: string[]) => {
+    const createSingleFlow = (source: Source, sourceKeys: string[]): Flow => {
       return {
         source,
         sourceKeys,
         sink,
         targetSite,
         sinkScriptUrl,
+        syntacticMatching: ((): boolean => {
+          return sourceKeys.some((sourceKey) => {
+            const cssis: CSSI[] =
+              source === "cookie" ? frame.cookies : frame.storageItems;
+            const cssi = cssis.find((cssi) => cssi.key === sourceKey);
+            if (typeof cssi === "undefined") {
+              return false;
+            }
+            return syntacticallyMatchesUrl(cssi.value, sinkTargetURL);
+          });
+        })(),
       };
     };
 
