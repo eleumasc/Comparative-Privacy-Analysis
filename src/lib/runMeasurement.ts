@@ -14,11 +14,6 @@ import { sum, countIfNonZero, bothSumCount } from "./util/stats";
 import { Agent } from "port_agent";
 import { Worker, isMainThread, parentPort } from "worker_threads";
 import { ContextSet, ContextFrame, Context } from "./measurement/ContextSet";
-import {
-  convertFlowToMatchingFlowArray,
-  equalsMatchingFlow,
-  getFrameMatchingFlows,
-} from "./measurement/MatchingFlow";
 import { evaluateInTaskPool } from "./util/startTaskPool";
 
 const DEFAULT_CONCURRENCY_LEVEL = 4;
@@ -52,14 +47,8 @@ interface SiteGeneralReport {
   trkStorageItemFlows: number;
   // ga
   ga: number;
-  // matching
+  // syntacticMatching
   syntacticMatchingTrkFlows: number;
-  // matchingFlows
-  matchingFlows: number;
-  trkMatchingFlows: number;
-  // convertedFlows
-  convertedFlows: number;
-  trkConvertedFlows: number;
 }
 
 interface SiteAggregateReport {
@@ -124,19 +113,9 @@ interface GlobalGeneralReport {
   trkCssiFlowDomains: number;
   // ga
   gaDomains: number;
-  // matching
+  // syntacticMatching
   syntacticMatchingTrkFlows: number;
   syntacticMatchingTrkFlowDomains: number;
-  // matchingFlows
-  matchingFlows: number;
-  matchingFlowDomains: number;
-  trkMatchingFlows: number;
-  trkMatchingFlowDomains: number;
-  // convertedFlows
-  convertedFlows: number;
-  convertedFlowDomains: number;
-  trkConvertedFlows: number;
-  trkConvertedFlowDomains: number;
 }
 
 interface GlobalAggregateReport {
@@ -529,32 +508,6 @@ const processSite = (
       (flow) => flow.syntacticMatching
     );
 
-    const matchingFlows = distinct(
-      [tf1ACtx.frames, tf1BCtx.frames].flatMap((context) =>
-        getFrameMatchingFlows(context)
-      ),
-      equalsMatchingFlow
-    ).filter((flow) => flow.targetSite !== firstPartySite); // consider just cross-site flows
-
-    const trkMatchingFlows = matchingFlows.filter((flow) => {
-      return (
-        flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
-      ).includes(flow.sourceKey);
-    });
-
-    const convertedFlows = distinct(
-      flows.flatMap(
-        (flow) => convertFlowToMatchingFlowArray(flow),
-        equalsMatchingFlow
-      )
-    );
-
-    const trkConvertedFlows = convertedFlows.filter((flow) => {
-      return (
-        flow.source === "cookie" ? trkCookieKeys : trkStorageItemKeys
-      ).includes(flow.sourceKey);
-    });
-
     return {
       general: {
         cookies: cookieKeys.length,
@@ -574,10 +527,6 @@ const processSite = (
             ? 1
             : 0,
         syntacticMatchingTrkFlows: syntacticMatchingTrkFlows.length,
-        matchingFlows: matchingFlows.length,
-        trkMatchingFlows: trkMatchingFlows.length,
-        convertedFlows: convertedFlows.length,
-        trkConvertedFlows: trkConvertedFlows.length,
       },
       tfAggregate,
       ffAggregate,
@@ -649,14 +598,6 @@ const combineSiteGeneralReports = (
     ga: sum(reports.map(({ ga }) => ga)) > 0 ? 1 : 0,
     syntacticMatchingTrkFlows: sum(
       reports.map(({ syntacticMatchingTrkFlows }) => syntacticMatchingTrkFlows)
-    ),
-    matchingFlows: sum(reports.map(({ matchingFlows }) => matchingFlows)),
-    trkMatchingFlows: sum(
-      reports.map(({ trkMatchingFlows }) => trkMatchingFlows)
-    ),
-    convertedFlows: sum(reports.map(({ convertedFlows }) => convertedFlows)),
-    trkConvertedFlows: sum(
-      reports.map(({ trkConvertedFlows }) => trkConvertedFlows)
     ),
   };
 };
@@ -805,20 +746,6 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
     const [syntacticMatchingTrkFlows, syntacticMatchingTrkFlowDomains] =
       bothSumCount(reports.map((report) => report.syntacticMatchingTrkFlows));
 
-    const [matchingFlows, matchingFlowDomains] = bothSumCount(
-      reports.map((report) => report.matchingFlows)
-    );
-    const [trkMatchingFlows, trkMatchingFlowDomains] = bothSumCount(
-      reports.map((report) => report.trkMatchingFlows)
-    );
-
-    const [convertedFlows, convertedFlowDomains] = bothSumCount(
-      reports.map((report) => report.convertedFlows)
-    );
-    const [trkConvertedFlows, trkConvertedFlowDomains] = bothSumCount(
-      reports.map((report) => report.trkConvertedFlows)
-    );
-
     return {
       // cookies
       cookies,
@@ -851,19 +778,9 @@ const getGlobalReport = (reports: SiteReport[]): GlobalReport => {
       trkCssiFlowDomains,
       // ga
       gaDomains,
-      // matching
+      // syntacticMatching
       syntacticMatchingTrkFlows,
       syntacticMatchingTrkFlowDomains,
-      // matchingFlows
-      matchingFlows,
-      matchingFlowDomains,
-      trkMatchingFlows,
-      trkMatchingFlowDomains,
-      // convertedFlows
-      convertedFlows,
-      convertedFlowDomains,
-      trkConvertedFlows,
-      trkConvertedFlowDomains,
     };
   };
 
