@@ -51,9 +51,7 @@ const _cloneSavedFrame = (savedFrame) => {
 };
 
 const getTaintReports = () => {
-  return (
-    XPCNativeWrapper(window.wrappedJSObject["$__taintReports"]) || []
-  ).map((taintReport) => {
+  return taintReports.map((taintReport) => {
     const { loc, parentloc, referrer, sink, stack, str, subframe, taint } =
       taintReport;
 
@@ -98,4 +96,12 @@ browser.runtime.onMessage.addListener((message, _, sendResponse) => {
 
 window.addEventListener("load", () => {
   browser.runtime.sendMessage({ type: "load" });
+});
+
+const taintReports = [];
+window.addEventListener("__taintreport", (r) => {
+  const value = r.detail;
+  const taint = value.str.taint;
+  const taintReport = { ...value, taint };
+  taintReports.push(taintReport);
 });

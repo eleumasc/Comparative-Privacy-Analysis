@@ -8,7 +8,7 @@
 
 - Clone this repository: `git clone https://github.com/eleumasc/Comparative-Privacy-Analysis && cd Comparative-Privacy-Analysis`
 - Install the dependencies: `npm i`
-- Build [Project Foxhound](https://github.com/SAP/project-foxhound) after patching it with `foxhound.patch`
+- Download [Project Foxhound](https://github.com/SAP/project-foxhound)
 - Copy `config.example.json` to `src/config.json` and edit `src/config.json` with the desired configuration
 - Build: `npm run build`
 
